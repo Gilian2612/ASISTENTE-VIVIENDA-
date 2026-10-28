@@ -18,7 +18,7 @@
 
 **Weighted KNN recommender for Bogotá zones (UPZ).**
 PTIA Project — Group 01 · Nicolás Prieto · William Santiago Ruiz Medina
-Escuela Colombiana de Ingeniería Julio Garavito — Systems Engineering Department
+
 
 > Current status: **Milestone 2** (interface prototype + solution progress). Zone data is **sample data**; the real dataset will be built in Milestone 3.
 

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sugerencias de Vivienda en Bogotá — Prototipo PTIA</title>
+<style>
+  :root {
+    --rojo: #1d4ed8;
+    --rojo-osc: #1e3a8a;
+    --verde: #1d4ed8;
+    --verde-claro: #e8efff;
+    --amarillo: #60a5fa;
+    --gris: #6b7280;
+    --gris-claro: #f3f4f6;
+    --borde: #e5e7eb;
+    --texto: #111111;
+    --fondo: #fafafa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    line-height: 1.5;
+  }
+  header {
+    background: #0f172a;
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { font-size: 1.25rem; font-weight: 600; cursor: pointer; }
+  header nav button {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.5);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 6px;
+    font-size: .875rem;
+  }
+  header nav button:hover, header nav button.activo { background: rgba(255,255,255,.18); }
+  .aviso {
+    background: #eef2f7;
+    border-bottom: 1px solid #cbd5e1;
+    color: #334155;
+    font-size: .8125rem;
+    text-align: center;
+    padding: 6px 12px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 28px 20px 60px; }
+  .pantalla { display: none; }
+  .pantalla.visible { display: block; }
+  h2 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--gris); margin-bottom: 24px; }
+  .tarjeta {
+    background: #fff;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+
+  /* CU1 — preferencias */
+  .slider-fila { margin-bottom: 22px; }
+  .slider-fila label {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .slider-fila .valor {
+    background: var(--rojo);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0 10px;
+    font-size: .875rem;
+    min-width: 32px;
+    text-align: center;
+  }
+  .slider-fila .desc { color: var(--gris); font-size: .8125rem; font-weight: 400; }
+  input[type=range] { width: 100%; accent-color: var(--rojo); }
+  .escala { display: flex; justify-content: space-between; font-size: .75rem; color: var(--gris); }
+  .presupuesto input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 1rem;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+  }
+  .btn {
+    background: var(--rojo);
+    color: #fff;
+    border: none;
+    padding: 12px 22px;
+    font-size: 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .btn:hover { background: var(--rojo-osc); }
+  .btn.sec { background: #fff; color: var(--rojo); border: 1px solid var(--rojo); }
+  .btn.sec:hover { background: #e8efff; }
+  .btn.peq { padding: 7px 14px; font-size: .875rem; }
+  .acciones { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+
+  /* CU2 — resultados */
+  .resultado { display: flex; gap: 18px; align-items: flex-start; }
+  .puesto {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--rojo);
+    min-width: 48px;
+  }
+  .resultado .cuerpo { flex: 1; }
+  .resultado h3 { font-size: 1.2rem; }
+  .resultado .loc { color: var(--gris); font-size: .875rem; margin-bottom: 8px; }
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+  .etq {
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: .8125rem;
+    border: 1px solid;
+  }
+  .etq.si { color: var(--verde); border-color: var(--verde); background: var(--verde-claro); }
+  .etq.no { color: #374151; border-color: #9ca3af; background: #f3f4f6; }
+  .sim-barra { background: var(--gris-claro); border-radius: 999px; height: 10px; overflow: hidden; }
+  .sim-barra div { height: 100%; border-radius: 999px; }
+  .sim-txt { font-size: .875rem; color: var(--gris); margin-top: 4px; display: flex; justify-content: space-between; }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
+  .barra-comparar {
+    position: sticky;
+    bottom: 12px;
+    background: var(--texto);
+    color: #fff;
+    border-radius: 10px;
+    padding: 12px 18px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .barra-comparar.visible { display: flex; }
+  .vacio { text-align: center; color: var(--gris); padding: 40px 10px; }
+
+  /* CU3 — detalle */
+  .var-fila { margin-bottom: 14px; }
+  .var-fila .cab { display: flex; justify-content: space-between; font-size: .9375rem; }
+  .var-fila .cab span:last-child { color: var(--gris); }
+  .barra { background: var(--gris-claro); border-radius: 999px; height: 12px; overflow: hidden; margin-top: 4px; }
+  .barra div { height: 100%; background: var(--rojo); border-radius: 999px; }
+  .datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .dato { background: var(--gris-claro); border-radius: 8px; padding: 12px; }
+  .dato .k { font-size: .75rem; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
+  .dato .v { font-size: 1.1rem; font-weight: 600; }
+  .mapa-sim {
+    height: 180px;
+    border: 2px dashed var(--borde);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gris);
+    font-size: .9rem;
+    text-align: center;
+    padding: 10px;
+  }
+
+  /* CU4 — comparar */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--borde); text-align: left; }
+  th { background: var(--gris-claro); font-weight: 600; }
+  td.gana { color: var(--verde); font-weight: 700; }
+  select {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--borde);
+    font-size: .9375rem;
+    min-width: 220px;
+  }
+  .selectores { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    background: var(--texto);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: .9rem;
+    transition: transform .25s;
+    z-index: 10;
+    max-width: 90%;
+  }
+  .toast.visible { transform: translateX(-50%) translateY(0); }
+  footer { text-align: center; color: var(--gris); font-size: .8rem; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 onclick="ir('preferencias')">🏙️ Sugerencias de Vivienda en Bogotá</h1>
+  <nav>
+    <button data-nav="preferencias" onclick="ir('preferencias')">Preferencias</button>
+    <button data-nav="resultados" onclick="ir('resultados')">Recomendados</button>
+    <button data-nav="comparar" onclick="ir('comparar')">Comparar</button>
+  </nav>
+</header>
+<div class="aviso">⚠️ Prototipo de interfaz (Hito 2): los datos de las zonas son <b>simulados</b> y algunas funciones están simuladas.</div>
+
+<main>
+
+  <!-- CU1: Ingresar preferencias -->
+  <section id="preferencias" class="pantalla visible">
+    <h2>¿Qué es importante para ti?</h2>
+    <p class="sub">Indica qué tanto te importa cada aspecto. Escala: 1 = No importa · 5 = Muy importante.</p>
+
+    <div class="tarjeta" id="sliders"></div>
+
+    <div class="tarjeta presupuesto">
+      <label for="presupuesto"><b>Presupuesto máximo de arriendo (COP / mes)</b></label>
+      <p class="sub" style="margin:4px 0 10px">Solo se recomendarán zonas cuyo arriendo promedio no supere este valor.</p>
+      <input id="presupuesto" type="number" min="500000" step="100000" value="2500000">
+    </div>
+
+    <div class="acciones">
+      <button class="btn" onclick="recomendar()">Ver barrios recomendados →</button>
+      <button class="btn sec" onclick="restablecer()">Restablecer</button>
+    </div>
+  </section>
+
+  <!-- CU2: Ver barrios recomendados -->
+  <section id="resultados" class="pantalla">
+    <h2>Barrios recomendados</h2>
+    <p class="sub" id="resumen-perfil">Primero ingresa tus preferencias.</p>
+    <div id="lista-resultados"></div>
+    <div class="barra-comparar" id="barra-comparar">
+      <span id="txt-comparar">Selecciona 2 zonas para comparar</span>
+      <button class="btn peq" onclick="compararSeleccion()">Comparar</button>
+    </div>
+    <div class="acciones" style="margin-top:18px">
+      <button class="btn sec" onclick="ir('preferencias')">← Ajustar preferencias</button>
+      <button class="btn sec" onclick="simulado('Guardar búsqueda')">💾 Guardar búsqueda</button>
+    </div>
+  </section>
+
+  <!-- CU3: Ver detalle del barrio -->
+  <section id="detalle" class="pantalla">
+    <div id="contenido-detalle"></div>
+  </section>
+
+  <!-- CU4: Comparar barrios -->
+  <section id="comparar" class="pantalla">
+    <h2>Comparar zonas</h2>
+    <p class="sub">Elige dos zonas para verlas lado a lado. En verde, la que gana en cada aspecto.</p>
+    <div class="selectores">
+      <select id="cmp-a" onchange="pintarComparacion()"></select>
+      <b>vs</b>
+      <select id="cmp-b" onchange="pintarComparacion()"></select>
+    </div>
+    <div class="tarjeta" id="tabla-comparar"></div>
+  </section>
+
+</main>
+
+<footer>Proyecto PTIA · Grupo 01 · Nicolás Prieto · William Santiago Ruiz Medina · Escuela Colombiana de Ingeniería Julio Garavito</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ------------------------------------------------------------------
+// Variables del modelo (las mismas del prototipo de papel)
+// ------------------------------------------------------------------
+const VARIABLES = [
+  { id: "transporte",    nombre: "Transporte público",      desc: "Estaciones de TransMilenio y SITP cercanas", si: "Transporte",      no: "Poco transporte" },
+  { id: "seguridad",     nombre: "Seguridad",               desc: "Inverso de la tasa de delitos",             si: "Seguro",          no: "Inseguro" },
+  { id: "precio",        nombre: "Precio de arriendo",      desc: "Qué tan económico es el arriendo",          si: "Precio bajo",     no: "Precio alto" },
+  { id: "universidades", nombre: "Cercanía a universidades", desc: "Universidades a distancia caminable",      si: "Universidad cerca", no: "Lejos de universidades" },
+  { id: "verdes",        nombre: "Zonas verdes / parques",  desc: "Parques y áreas verdes (IDRD)",             si: "Parques",         no: "Pocas zonas verdes" },
+];
+
+// ------------------------------------------------------------------
+// Dataset SIMULADO de zonas (UPZ). Puntajes 1-5 y arriendo en COP.
+// En el Hito 3 se reemplaza por el dataset real normalizado.
+// ------------------------------------------------------------------
+const ZONAS = [
+  { nombre: "Chapinero",             localidad: "Chapinero",       transporte: 5, seguridad: 3, universidades: 5, verdes: 3, arriendo: 2800000 },
+  { nombre: "Chicó Lago",            localidad: "Chapinero",       transporte: 4, seguridad: 5, universidades: 3, verdes: 4, arriendo: 4200000 },
+  { nombre: "Pardo Rubio",           localidad: "Chapinero",       transporte: 4, seguridad: 4, universidades: 5, verdes: 4, arriendo: 2600000 },
+  { nombre: "Teusaquillo",           localidad: "Teusaquillo",     transporte: 5, seguridad: 4, universidades: 4, verdes: 5, arriendo: 2100000 },
+  { nombre: "Galerías",              localidad: "Teusaquillo",     transporte: 4, seguridad: 4, universidades: 3, verdes: 3, arriendo: 1900000 },
+  { nombre: "La Candelaria",         localidad: "La Candelaria",   transporte: 4, seguridad: 2, universidades: 5, verdes: 2, arriendo: 1400000 },
+  { nombre: "Usaquén",               localidad: "Usaquén",         transporte: 3, seguridad: 5, universidades: 2, verdes: 4, arriendo: 3500000 },
+  { nombre: "Santa Bárbara",         localidad: "Usaquén",         transporte: 3, seguridad: 5, universidades: 2, verdes: 3, arriendo: 3900000 },
+  { nombre: "Los Cedros",            localidad: "Usaquén",         transporte: 3, seguridad: 4, universidades: 2, verdes: 4, arriendo: 2400000 },
+  { nombre: "Niza",                  localidad: "Suba",            transporte: 3, seguridad: 4, universidades: 3, verdes: 4, arriendo: 2300000 },
+  { nombre: "Suba",                  localidad: "Suba",            transporte: 4, seguridad: 2, universidades: 2, verdes: 3, arriendo: 1200000 },
+  { nombre: "La Alhambra",           localidad: "Suba",            transporte: 3, seguridad: 4, universidades: 2, verdes: 3, arriendo: 2500000 },
+  { nombre: "Modelia",               localidad: "Fontibón",        transporte: 3, seguridad: 4, universidades: 1, verdes: 4, arriendo: 1800000 },
+  { nombre: "Fontibón",              localidad: "Fontibón",        transporte: 3, seguridad: 3, universidades: 1, verdes: 2, arriendo: 1300000 },
+  { nombre: "Ciudad Salitre Oriental", localidad: "Teusaquillo",   transporte: 4, seguridad: 4, universidades: 3, verdes: 5, arriendo: 2200000 },
+  { nombre: "Quinta Paredes",        localidad: "Teusaquillo",     transporte: 4, seguridad: 3, universidades: 4, verdes: 3, arriendo: 1700000 },
+  { nombre: "Kennedy Central",       localidad: "Kennedy",         transporte: 4, seguridad: 2, universidades: 1, verdes: 3, arriendo: 1000000 },
+  { nombre: "Castilla",              localidad: "Kennedy",         transporte: 3, seguridad: 3, universidades: 1, verdes: 3, arriendo: 1250000 },
+  { nombre: "Restrepo",              localidad: "Antonio Nariño",  transporte: 4, seguridad: 2, universidades: 2, verdes: 2, arriendo: 1100000 },
+  { nombre: "Puente Aranda",         localidad: "Puente Aranda",   transporte: 4, seguridad: 3, universidades: 2, verdes: 2, arriendo: 1150000 },
+  { nombre: "Bosa Central",          localidad: "Bosa",            transporte: 3, seguridad: 1, universidades: 1, verdes: 2, arriendo: 800000 },
+  { nombre: "Tintal Norte",          localidad: "Kennedy",         transporte: 3, seguridad: 2, universidades: 1, verdes: 4, arriendo: 950000 },
+];
+
+// Normalización Min-Max a [0,1], orientada para que 1 sea siempre lo mejor
+const minArr = Math.min(...ZONAS.map(z => z.arriendo));
+const maxArr = Math.max(...ZONAS.map(z => z.arriendo));
+ZONAS.forEach((z, i) => {
+  z.idx = i;
+  z.norm = {
+    transporte:    (z.transporte - 1) / 4,
+    seguridad:     (z.seguridad - 1) / 4,
+    precio:        (maxArr - z.arriendo) / (maxArr - minArr),   // más barato = mejor
+    universidades: (z.universidades - 1) / 4,
+    verdes:        (z.verdes - 1) / 4,
+  };
+});
+
+// ------------------------------------------------------------------
+// Estado
+// ------------------------------------------------------------------
+const PESOS_INICIALES = { transporte: 3, seguridad: 3, precio: 3, universidades: 3, verdes: 3 };
+let pesos = { ...PESOS_INICIALES };
+let resultados = [];
+let seleccion = new Set();
+
+// ------------------------------------------------------------------
+// Motor KNN ponderado
+// d(z) = sqrt( Σ w_i · (z_i − 1)² ),  sim = (1 − d / sqrt(Σ w_i)) · 100
+// ------------------------------------------------------------------
+function knn(pesos, presupuesto, k = 3) {
+  const sumaW = VARIABLES.reduce((s, v) => s + pesos[v.id], 0);
+  const dMax = Math.sqrt(sumaW);
+  return ZONAS
+    .filter(z => z.arriendo <= presupuesto)
+    .map(z => {
+      const d = Math.sqrt(VARIABLES.reduce((s, v) => s + pesos[v.id] * (z.norm[v.id] - 1) ** 2, 0));
+      return { zona: z, d, sim: Math.round((1 - d / dMax) * 100) };
+    })
+    .sort((a, b) => a.d - b.d)
+    .slice(0, k);
+}
+
+// Módulo de explicación: etiquetas ✓/✗ por variable, priorizando las de mayor peso
+function etiquetas(zona) {
+  return VARIABLES
+    .filter(v => pesos[v.id] >= 3)
+    .sort((a, b) => pesos[b.id] - pesos[a.id])
+    .map(v => {
+      const x = zona.norm[v.id];
+      if (x >= 0.6) return { txt: v.si + " ✓", tipo: "si" };
+      if (x <= 0.4) return { txt: v.no + " ✗", tipo: "no" };
+      return null;
+    })
+    .filter(Boolean);
+}
+
+// ------------------------------------------------------------------
+// Navegación
+// ------------------------------------------------------------------
+function ir(id) {
+  document.querySelectorAll(".pantalla").forEach(p => p.classList.remove("visible"));
+  document.getElementById(id).classList.add("visible");
+  document.querySelectorAll("header nav button").forEach(b =>
+    b.classList.toggle("activo", b.dataset.nav === id));
+  if (id === "comparar") prepararComparacion();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+const pesos2txt = n => ["", "No importa", "Poco", "Algo", "Importante", "Muy importante"][n];
+const cop = n => "$" + n.toLocaleString("es-CO");
+const colorSim = s => s >= 80 ? "#1d4ed8" : s >= 65 ? "#60a5fa" : "#9ca3af";
+
+// ------------------------------------------------------------------
+// CU1 — Preferencias
+// ------------------------------------------------------------------
+function pintarSliders() {
+  document.getElementById("sliders").innerHTML = VARIABLES.map(v => `
+    <div class="slider-fila">
+      <label for="s-${v.id}">
+        <span>${v.nombre} <span class="desc">· ${v.desc}</span></span>
+        <span class="valor" id="v-${v.id}">${pesos[v.id]}</span>
+      </label>
+      <input type="range" id="s-${v.id}" min="1" max="5" step="1" value="${pesos[v.id]}"
+             oninput="pesos['${v.id}'] = +this.value; document.getElementById('v-${v.id}').textContent = this.value">
+      <div class="escala"><span>1 · No importa</span><span>5 · Muy importante</span></div>
+    </div>`).join("");
+}
+
+function restablecer() {
+  pesos = { ...PESOS_INICIALES };
+  document.getElementById("presupuesto").value = 2500000;
+  pintarSliders();
+}
+
+// ------------------------------------------------------------------
+// CU2 — Resultados
+// ------------------------------------------------------------------
+function recomendar() {
+  const presupuesto = +document.getElementById("presupuesto").value || 0;
+  resultados = knn(pesos, presupuesto);
+  seleccion.clear();
+
+  document.getElementById("resumen-perfil").innerHTML =
+    "Tu perfil: " + VARIABLES.map(v => `${v.nombre} <b>${pesos[v.id]}</b>`).join(" · ") +
+    ` · Presupuesto <b>${cop(presupuesto)}</b>`;
+
+  const lista = document.getElementById("lista-resultados");
+  if (!resultados.length) {
+    lista.innerHTML = `<div class="tarjeta vacio">😕 No hay zonas con arriendo promedio menor o igual a ${cop(presupuesto)}.<br>Prueba subiendo tu presupuesto.</div>`;
+  } else {
+    lista.innerHTML = resultados.map((r, i) => `
+      <div class="tarjeta resultado">
+        <div class="puesto">#${i + 1}</div>
+        <div class="cuerpo">
+          <h3>${i === 0 ? "Mejor coincidencia · " : ""}${r.zona.nombre}</h3>
+          <div class="loc">Localidad ${r.zona.localidad} · Arriendo promedio ${cop(r.zona.arriendo)}</div>
+          <div class="etiquetas">${etiquetas(r.zona).map(e => `<span class="etq ${e.tipo}">${e.txt}</span>`).join("")}</div>
+          <div class="sim-barra"><div style="width:${r.sim}%; background:${colorSim(r.sim)}"></div></div>
+          <div class="sim-txt"><span>Similitud</span><b>${r.sim}%</b></div>
+          <div class="acciones">
+            <button class="btn peq" onclick="verDetalle(${r.zona.idx}, ${r.sim})">Ver detalle</button>
+            <label class="chk"><input type="checkbox" onchange="alternarSeleccion(${r.zona.idx}, this)"> Comparar</label>
+          </div>
+        </div>
+      </div>`).join("");
+  }
+  actualizarBarraComparar();
+  ir("resultados");
+}
+
+function alternarSeleccion(idx, chk) {
+  if (chk.checked) {
+    if (seleccion.size >= 2) { chk.checked = false; toast("Solo puedes comparar 2 zonas a la vez"); return; }
+    seleccion.add(idx);
+  } else seleccion.delete(idx);
+  actualizarBarraComparar();
+}
+
+function actualizarBarraComparar() {
+  const barra = document.getElementById("barra-comparar");
+  barra.classList.toggle("visible", seleccion.size > 0);
+  document.getElementById("txt-comparar").textContent =
+    seleccion.size === 2 ? "2 zonas seleccionadas" : "Selecciona 1 zona más para comparar";
+}
+
+function compararSeleccion() {
+  if (seleccion.size !== 2) { toast("Selecciona exactamente 2 zonas"); return; }
+  const [a, b] = [...seleccion];
+  ir("comparar");
+  document.getElementById("cmp-a").value = a;
+  document.getElementById("cmp-b").value = b;
+  pintarComparacion();
+}
+
+// ------------------------------------------------------------------
+// CU3 — Detalle de la zona
+// ------------------------------------------------------------------
+function verDetalle(idx, sim) {
+  const z = ZONAS[idx];
+  document.getElementById("contenido-detalle").innerHTML = `
+    <h2>${z.nombre}</h2>
+    <p class="sub">Localidad ${z.localidad}${sim !== undefined ? ` · Similitud con tu perfil: <b>${sim}%</b>` : ""}</p>
+
+    <div class="tarjeta">
+      <div class="datos">
+        <div class="dato"><div class="k">Arriendo promedio</div><div class="v">${cop(z.arriendo)}</div></div>
+        <div class="dato"><div class="k">Localidad</div><div class="v">${z.localidad}</div></div>
+        <div class="dato"><div class="k">Tipo de zona</div><div class="v">UPZ</div></div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h3 style="margin-bottom:12px">¿Cómo le va en cada aspecto?</h3>
+      ${VARIABLES.map(v => `
+        <div class="var-fila">
+          <div class="cab"><span>${v.nombre}</span><span>${Math.round(z.norm[v.id] * 100)}/100 · tu importancia: ${pesos[v.id]} (${pesos2txt(pesos[v.id])})</span></div>
+          <div class="barra"><div style="width:${Math.max(z.norm[v.id] * 100, 3)}%"></div></div>
+        </div>`).join("")}
+      <div class="etiquetas">${etiquetas(z).map(e => `<span class="etq ${e.tipo}">${e.txt}</span>`).join("")}</div>
+    </div>
+
+    <div class="tarjeta">
+      <h3 style="margin-bottom:12px">Ubicación</h3>
+      <div class="mapa-sim">🗺️ Mapa de la zona<br><small>(Simulado. Disponible en la versión funcional.)</small></div>
+    </div>
+
+    <div class="acciones">
+      <button class="btn sec" onclick="ir('resultados')">← Volver a recomendados</button>
+      <button class="btn sec" onclick="irComparando(${idx})">Comparar con otra zona</button>
+      <button class="btn sec" onclick="simulado('Ver inmuebles disponibles')">🏠 Ver inmuebles disponibles</button>
+    </div>`;
+  ir("detalle");
+}
+
+function irComparando(idx) {
+  ir("comparar");
+  const a = document.getElementById("cmp-a");
+  const b = document.getElementById("cmp-b");
+  a.value = idx;
+  if (+b.value === idx) b.value = ZONAS.find(z => z.idx !== idx).idx;
+  pintarComparacion();
+}
+
+// ------------------------------------------------------------------
+// CU4 — Comparar zonas
+// ------------------------------------------------------------------
+function prepararComparacion() {
+  const a = document.getElementById("cmp-a");
+  const b = document.getElementById("cmp-b");
+  if (!a.options.length) {
+    const opts = ZONAS.map(z => `<option value="${z.idx}">${z.nombre} (${z.localidad})</option>`).join("");
+    a.innerHTML = opts;
+    b.innerHTML = opts;
+    a.value = resultados[0]?.zona.idx ?? 0;
+    b.value = resultados[1]?.zona.idx ?? 1;
+  }
+  pintarComparacion();
+}
+
+function pintarComparacion() {
+  const za = ZONAS[+document.getElementById("cmp-a").value];
+  const zb = ZONAS[+document.getElementById("cmp-b").value];
+  const cont = document.getElementById("tabla-comparar");
+  if (za === zb) { cont.innerHTML = `<p class="vacio">Elige dos zonas distintas.</p>`; return; }
+
+  const sumaW = VARIABLES.reduce((s, v) => s + pesos[v.id], 0);
+  const sim = z => Math.round((1 - Math.sqrt(VARIABLES.reduce((s, v) => s + pesos[v.id] * (z.norm[v.id] - 1) ** 2, 0)) / Math.sqrt(sumaW)) * 100);
+  const celda = (x, y) => `<td class="${x > y ? "gana" : ""}">${Math.round(x * 100)}/100</td>`;
+  const sa = sim(za), sb = sim(zb);
+
+  cont.innerHTML = `
+    <table>
+      <tr><th>Aspecto</th><th>${za.nombre}</th><th>${zb.nombre}</th></tr>
+      ${VARIABLES.map(v => `<tr><td>${v.nombre}</td>${celda(za.norm[v.id], zb.norm[v.id])}${celda(zb.norm[v.id], za.norm[v.id])}</tr>`).join("")}
+      <tr><td>Arriendo promedio</td>
+          <td class="${za.arriendo < zb.arriendo ? "gana" : ""}">${cop(za.arriendo)}</td>
+          <td class="${zb.arriendo < za.arriendo ? "gana" : ""}">${cop(zb.arriendo)}</td></tr>
+      <tr><th>Similitud con tu perfil</th>
+          <th class="${sa > sb ? "gana" : ""}">${sa}%</th>
+          <th class="${sb > sa ? "gana" : ""}">${sb}%</th></tr>
+    </table>
+    <div class="acciones" style="margin-top:14px">
+      <button class="btn peq sec" onclick="verDetalle(${za.idx}, ${sa})">Detalle de ${za.nombre}</button>
+      <button class="btn peq sec" onclick="verDetalle(${zb.idx}, ${sb})">Detalle de ${zb.nombre}</button>
+    </div>`;
+}
+
+// ------------------------------------------------------------------
+// Utilidades
+// ------------------------------------------------------------------
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("visible");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("visible"), 2600);
+}
+function simulado(nombre) {
+  toast(`«${nombre}»: función simulada, disponible en la versión funcional.`);
+}
+
+pintarSliders();
+document.querySelector('[data-nav="preferencias"]').classList.add("activo");
+</script>
+</body>
+</html>
