@@ -1,0 +1,24 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "unit: prueba unitaria (rápida, sin I/O ni dependencias externas)",
+]
+addopts = "--strict-markers --cov=KNN --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"
+
+[tool.coverage.run]
+branch = true
+source = ["KNN"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Falla si la cobertura baja de este umbral (equivalente a jacoco:check)
+fail_under = 90
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
