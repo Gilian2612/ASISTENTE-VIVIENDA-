@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
+testpaths = ["src/tests"]
+pythonpath = ["src"]
 markers = [
     "unit: prueba unitaria (rápida, sin I/O ni dependencias externas)",
 ]
