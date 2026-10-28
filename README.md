@@ -1,14 +1,10 @@
 <a id="top"></a>
 
-<div align="center">
+# Housing Suggestions in Bogotá · Sugerencias de Vivienda en Bogotá
 
-# Housing Suggestions in Bogotá
+[![CI](https://github.com/Gilian2612/ASISTENTE-VIVIENDA-/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Gilian2612/ASISTENTE-VIVIENDA-/actions/workflows/ci.yml)
 
-# Sugerencias de Vivienda en Bogotá
-
-[English](#english) | [Español](#español)
-
-</div>
+**Language / Idioma:** [English](#english) · [Español](#español)
 
 ---
 
@@ -16,9 +12,12 @@
 
 # English
 
-**Weighted KNN recommender for Bogotá zones (UPZ).**
-PTIA Project — Group 01 · Nicolás Prieto · William Santiago Ruiz Medina
+Recommender system that suggests the **3 zones (UPZ) of Bogotá** that best match a user's profile, using a **weighted KNN** over transport, safety, price, universities and green areas, within the user's rent budget.
 
+**Stack:** Python 3 + pytest + vanilla HTML/JS (FastAPI/Flask planned for Milestone 3)
+
+PTIA Project — Group 01 · Nicolás Prieto · William Santiago Ruiz Medina
+Escuela Colombiana de Ingeniería Julio Garavito — Systems Engineering Department
 
 > Current status: **Milestone 2** (interface prototype + solution progress). Zone data is **sample data**; the real dataset will be built in Milestone 3.
 
@@ -172,7 +171,10 @@ Python 3 · pytest / pytest-cov · HTML, CSS and JavaScript. Planned for Milesto
 
 # Español
 
-**Recomendador de zonas (UPZ) de Bogotá basado en KNN ponderado.**
+Sistema de recomendación que sugiere las **3 zonas (UPZ) de Bogotá** más afines al perfil de un usuario, usando un **KNN ponderado** sobre transporte, seguridad, precio, universidades y zonas verdes, dentro de su presupuesto de arriendo.
+
+**Stack:** Python 3 + pytest + HTML/JS vanilla (FastAPI/Flask previstos para el Hito 3)
+
 Proyecto PTIA — Grupo 01 · Nicolás Prieto · William Santiago Ruiz Medina
 Escuela Colombiana de Ingeniería Julio Garavito — Departamento de Ingeniería de Sistemas
 
