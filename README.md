@@ -86,6 +86,8 @@ Preferences (UC1) ──► Recommended zones (UC2) ──► Detail (UC3)
 
 ## Architecture
 
+![System architecture diagram](DOCS/img/Architecture%20diagram.png)
+
 | Component | Responsibility |
 |---|---|
 | **Data module (ETL)** | Obtain, clean, merge and normalize data per zone (`zonas.csv`). *Pending (Milestone 3).* |
@@ -239,6 +241,8 @@ Preferencias (CU1) ──► Barrios recomendados (CU2) ──► Detalle (CU3)
 ```
 
 ## Arquitectura
+
+![Diagrama de arquitectura del sistema](DOCS/img/Architecture%20diagram.png)
 
 | Componente | Responsabilidad |
 |---|---|
