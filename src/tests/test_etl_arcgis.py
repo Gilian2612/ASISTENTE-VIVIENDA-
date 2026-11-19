@@ -101,6 +101,12 @@ class TestConsultar:
         assert p["resultOffset"] == "0"
 
     @pytest.mark.unit
+    def test_sin_geometria(self, servidor):
+        s = servidor({"features": features(1)})
+        arcgis.consultar(URL_CAPA, geometria=False, tam_pagina=10)
+        assert s.params(0)["returnGeometry"] == "false"
+
+    @pytest.mark.unit
     def test_pagina_hasta_agotar(self, servidor):
         s = servidor({"features": features(2)}, {"features": features(2)}, {"features": features(1)})
         assert len(arcgis.consultar(URL_CAPA, tam_pagina=2)) == 5
@@ -130,7 +136,7 @@ class TestFuentes:
     @pytest.mark.unit
     def test_capas_en_servidor_oficial(self):
         for nombre, url in fuentes.CAPAS.items():
-            assert url.startswith(arcgis.BASE), nombre
+            assert url.startswith((arcgis.BASE, fuentes.BASE_SDSCJ)), nombre
             assert set(fuentes.CAMPOS[nombre]), nombre
 
     @pytest.mark.unit
@@ -141,4 +147,5 @@ class TestFuentes:
         )
         capas = fuentes.descargar_todo()
         assert set(capas) == set(fuentes.CAPAS)
+        assert set(fuentes.SIN_GEOMETRIA) <= set(fuentes.CAPAS)
         assert sorted(llamadas) == sorted(fuentes.CAPAS.values())

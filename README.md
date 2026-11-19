@@ -166,10 +166,11 @@ cd src && python3 -m ETL.construir_zonas
 | Transport | `movilidad/transportepublico` (TM stations, portals, SITP stops) | Stations/stops per km² |
 | Green areas | `recreaciondeporte/parquesyescenarios` (IDRD) | % of UPZ area covered by parks |
 | Type | Hardcoded table `src/ETL/tipos_upz.py` (POT categories) | `industrial` / `dotacional` / `residencial` |
+| Safety | [SDSCJ](https://oaiee.scj.gov.co/agc/rest/services/Tematicos_Pub/CifrasSCJ/MapServer) `CifrasSCJ` layers 3 (123 incidents by UPZ) and 0 (high-impact crimes by locality) | 70 % incidents per km² of the UPZ + 30 % crimes per km² of the locality, average Jan–Sep 2025–2026, inverted (1 = safest) |
 
 Each indicator is divided by its 95th percentile, computed over residential UPZ only, and clipped to `[0, 1]`. A park that crosses UPZ boundaries counts in every UPZ it touches, and its area is split by the share inside each one. Industrial and institutional ("dotacional") UPZ are **marked, not excluded**.
 
-**Hybrid KNN:** `KNN/knn.py` loads `data/zonas.csv` (real transport, green areas, locality and type) and fills safety, universities and rent with **provisional per-locality values** (`PROVISIONAL_POR_LOCALIDAD`) until a verified source exists. `recomendar(..., industrial=True|False|None)` answers "are you looking for an industrial zone? yes / no / no preference".
+**Hybrid KNN:** `KNN/knn.py` loads `data/zonas.csv` (real transport, safety, green areas, locality and type) and fills universities and rent with **provisional per-locality values** (`PROVISIONAL_POR_LOCALIDAD`) until a verified source exists. `recomendar(..., industrial=True|False|None)` answers "are you looking for an industrial zone? yes / no / no preference".
 
 ### Tests and coverage
 
@@ -360,10 +361,11 @@ cd src && python3 -m ETL.construir_zonas
 | Transporte | `movilidad/transportepublico` (estaciones y portales TM, paraderos SITP) | Estaciones/paraderos por km² |
 | Zonas verdes | `recreaciondeporte/parquesyescenarios` (IDRD) | % del área de la UPZ en parques |
 | Tipo | Tabla hardcodeada `src/ETL/tipos_upz.py` (categorías del POT) | `industrial` / `dotacional` / `residencial` |
+| Seguridad | [SDSCJ](https://oaiee.scj.gov.co/agc/rest/services/Tematicos_Pub/CifrasSCJ/MapServer) `CifrasSCJ`, capas 3 (incidentes 123 por UPZ) y 0 (delitos de alto impacto por localidad) | 70 % incidentes por km² de la UPZ + 30 % delitos por km² de la localidad, promedio ene–sep 2025–2026, invertido (1 = más segura) |
 
 Cada indicador se divide por su percentil 95, calculado solo sobre las UPZ residenciales, y se recorta a `[0, 1]`. Un parque que cruza límites cuenta en todas las UPZ que toca, y su área se reparte según la porción que cae en cada una. Las UPZ industriales y dotacionales **se marcan, no se excluyen**.
 
-**KNN híbrido:** `KNN/knn.py` carga `data/zonas.csv` (transporte, verdes, localidad y tipo reales) y completa seguridad, universidades y arriendo con **valores provisionales por localidad** (`PROVISIONAL_POR_LOCALIDAD`) hasta tener una fuente verificada. `recomendar(..., industrial=True|False|None)` responde "¿buscas zona industrial? sí / no / sin preferencia".
+**KNN híbrido:** `KNN/knn.py` carga `data/zonas.csv` (transporte, seguridad, verdes, localidad y tipo reales) y completa universidades y arriendo con **valores provisionales por localidad** (`PROVISIONAL_POR_LOCALIDAD`) hasta tener una fuente verificada. `recomendar(..., industrial=True|False|None)` responde "¿buscas zona industrial? sí / no / sin preferencia".
 
 ### Pruebas y cobertura
 
