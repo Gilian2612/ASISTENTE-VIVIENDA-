@@ -459,3 +459,18 @@ class TestRecomendarConDatosReales:
         resultado = recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=len(ZONAS), industrial=True)
         assert resultado
         assert all(METADATOS[n]["tipo"] == "industrial" for n, _ in resultado)
+
+
+class TestFormatoNombre:
+    @pytest.mark.unit
+    @pytest.mark.parametrize("entrada,salida", [
+        ("PASEO DE LOS LIBERTADORES", "Paseo de los Libertadores"),
+        ("LA CANDELARIA", "La Candelaria"),          # conector al inicio se capitaliza
+        ("SAN ISIDRO - PATIOS", "San Isidro - Patios"),
+        ("20 DE JULIO", "20 de Julio"),
+        ("ANTONIO NARIÑO", "Antonio Nariño"),
+        ("", ""),
+    ])
+    def test_formato(self, entrada, salida):
+        from KNN.knn import formato_nombre
+        assert formato_nombre(entrada) == salida
