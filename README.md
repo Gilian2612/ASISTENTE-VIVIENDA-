@@ -99,7 +99,10 @@ Preferences (UC1) ──► Recommended zones (UC2) ──► Detail (UC3)
 ```
 .
 ├── FRONT/
-│   └── index.html          # Interface prototype (HTML + CSS + JS, no dependencies)
+│   └── index.html          # Web interface (HTML + CSS + JS), consumes the API
+├── API/
+│   ├── rutas.py            # API routes (/api/zonas, /api/recomendar)
+│   └── servidor.py         # Local HTTP server (standard library)
 ├── KNN/
 │   └── knn.py              # KNN engine in Python (standard library only)
 ├── tests/
@@ -115,9 +118,20 @@ The full justification (scope, methodological design, tools and architecture) is
 
 ## How to run
 
-### Interface prototype
+### Web app (front + API)
 
-Open `FRONT/index.html` in a browser; no installation needed. The KNN engine is implemented in JavaScript with the same formulas and a simulated dataset of 22 UPZ. "Save search", "View available properties" and the map are **simulated**.
+```bash
+cd src && python3 -m API.servidor        # optional port: python3 -m API.servidor 8080
+```
+
+Then open <http://localhost:8000>. The server (standard library only) serves `FRONT/index.html` and a JSON API backed by `KNN/knn.py` and `data/zonas.csv`:
+
+| Route | Description |
+|---|---|
+| `GET /api/zonas` | All UPZ with locality, type, rent and normalized variables |
+| `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k zones with similarity % |
+
+The front no longer has its own data or KNN: everything comes from the API. Provisional variables are labeled in the UI. "Save search", "View available properties" and the map are still **simulated**.
 
 ### KNN engine in Python
 
@@ -279,7 +293,10 @@ Preferencias (CU1) ──► Barrios recomendados (CU2) ──► Detalle (CU3)
 ```
 .
 ├── FRONT/
-│   └── index.html          # Prototipo de interfaz (HTML + CSS + JS, sin dependencias)
+│   └── index.html          # Interfaz web (HTML + CSS + JS), consume la API
+├── API/
+│   ├── rutas.py            # Rutas de la API (/api/zonas, /api/recomendar)
+│   └── servidor.py         # Servidor HTTP local (librería estándar)
 ├── KNN/
 │   └── knn.py              # Motor KNN en Python (solo librería estándar)
 ├── tests/
@@ -295,9 +312,20 @@ La justificación completa (alcance, diseño metodológico, herramientas y arqui
 
 ## Cómo ejecutarlo
 
-### Prototipo de interfaz
+### Aplicación web (front + API)
 
-Abre `FRONT/index.html` en el navegador; no requiere instalación. El motor KNN está implementado en JavaScript con las mismas fórmulas y un dataset simulado de 22 UPZ. «Guardar búsqueda», «Ver inmuebles disponibles» y el mapa están **simulados**.
+```bash
+cd src && python3 -m API.servidor        # puerto opcional: python3 -m API.servidor 8080
+```
+
+Luego abre <http://localhost:8000>. El servidor (solo librería estándar) sirve `FRONT/index.html` y una API JSON que usa `KNN/knn.py` y `data/zonas.csv`:
+
+| Ruta | Descripción |
+|---|---|
+| `GET /api/zonas` | Todas las UPZ con localidad, tipo, arriendo y variables normalizadas |
+| `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k de zonas con % de similitud |
+
+El front ya no tiene datos ni KNN propios: todo viene de la API. Las variables provisionales se marcan en la interfaz. «Guardar búsqueda», «Ver inmuebles disponibles» y el mapa siguen **simulados**.
 
 ### Motor KNN en Python
 

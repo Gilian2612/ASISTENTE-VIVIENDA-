@@ -18,6 +18,9 @@ from pathlib import Path
 
 VARIABLES = ["transporte", "seguridad", "precio", "universidades", "verdes"]
 
+# Variables que aún usan datos provisionales (ver PROVISIONAL_POR_LOCALIDAD).
+VARIABLES_PROVISIONALES = ["seguridad", "precio", "universidades"]
+
 RUTA_ZONAS = Path(__file__).resolve().parents[2] / "data" / "zonas.csv"
 
 # PROVISIONAL — valores de ejemplo por localidad, NO son datos oficiales.
@@ -45,6 +48,18 @@ PROVISIONAL_POR_LOCALIDAD = {
     "CIUDAD BOLIVAR":     (0.25, 0.05,   750_000),
     "SUMAPAZ":            (0.70, 0.00,   600_000),
 }
+
+
+CONECTORES = {"de", "del", "la", "las", "los", "el", "y"}
+
+
+def formato_nombre(texto):
+    """'PASEO DE LOS LIBERTADORES' -> 'Paseo de los Libertadores'."""
+    palabras = texto.strip().lower().split()
+    return " ".join(
+        p if i > 0 and p in CONECTORES else p[:1].upper() + p[1:]
+        for i, p in enumerate(palabras)
+    )
 
 
 def cargar_zonas(ruta=RUTA_ZONAS, provisional=None):
@@ -79,7 +94,7 @@ def cargar_zonas(ruta=RUTA_ZONAS, provisional=None):
     for f in filas:
         seguridad, universidades, arriendo = provisional[f["localidad"]]
         precio = 1 - (arriendo - minimo) / rango
-        nombre = f["nombre"].title()
+        nombre = formato_nombre(f["nombre"])
         zonas[nombre] = (
             [float(f["transporte"]), seguridad, round(precio, 4), universidades, float(f["verdes"])],
             arriendo,
