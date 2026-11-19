@@ -6,12 +6,10 @@ El usuario da la importancia (1-5) de cada variable, un presupuesto máximo y,
 opcionalmente, si busca o evita zonas industriales; se recomiendan las K
 zonas más cercanas a su perfil ideal.
 
-Datos HÍBRIDOS:
-- REALES (data/zonas.csv, generado por `ETL.construir_zonas`):
-  UPZ, localidad, tipo, transporte, seguridad (SDSCJ), universidades
-  (SNIES + POT) y zonas verdes.
-- PROVISIONAL (hardcodeado abajo, por localidad, hasta tener fuente):
-  arriendo promedio (del que sale `precio`).
+Datos: data/zonas.csv, generado por `ETL.construir_zonas` a partir de
+fuentes oficiales (Catastro/IDECA, SDSCJ, SNIES, SDP). Las 5 variables
+vienen ya normalizadas; `arriendo_estimado` (COP) sale del avalúo catastral
+y se usa para el filtro de presupuesto (ver DOCS/PRECIO.md).
 """
 import csv
 import math
@@ -19,36 +17,10 @@ from pathlib import Path
 
 VARIABLES = ["transporte", "seguridad", "precio", "universidades", "verdes"]
 
-# Variables que aún usan datos provisionales (ver PROVISIONAL_POR_LOCALIDAD).
-VARIABLES_PROVISIONALES = ["precio"]
+# Variables que aún usan datos provisionales (ninguna desde que hay fuente de precio).
+VARIABLES_PROVISIONALES = []
 
 RUTA_ZONAS = Path(__file__).resolve().parents[2] / "data" / "zonas.csv"
-
-# PROVISIONAL — valores de ejemplo por localidad, NO son datos oficiales.
-# Reemplazar cuando haya fuente (OTC/Catastro).
-# localidad: arriendo promedio COP
-PROVISIONAL_POR_LOCALIDAD = {
-    "USAQUEN":            2_600_000,
-    "CHAPINERO":          2_900_000,
-    "SANTA FE":           1_500_000,
-    "SAN CRISTOBAL":      900_000,
-    "USME":               750_000,
-    "TUNJUELITO":         1_000_000,
-    "BOSA":               850_000,
-    "KENNEDY":            1_100_000,
-    "FONTIBON":           1_700_000,
-    "ENGATIVA":           1_300_000,
-    "SUBA":               1_600_000,
-    "BARRIOS UNIDOS":     1_800_000,
-    "TEUSAQUILLO":        2_000_000,
-    "LOS MARTIRES":       1_200_000,
-    "ANTONIO NARIÑO":     1_200_000,
-    "PUENTE ARANDA":      1_300_000,
-    "CANDELARIA":         1_500_000,
-    "RAFAEL URIBE URIBE": 950_000,
-    "CIUDAD BOLIVAR":     750_000,
-    "SUMAPAZ":            600_000,
-}
 
 
 CONECTORES = {"de", "del", "la", "las", "los", "el", "y"}
@@ -63,49 +35,36 @@ def formato_nombre(texto):
     )
 
 
-def cargar_zonas(ruta=RUTA_ZONAS, provisional=None):
-    """Lee el CSV del ETL y completa con el arriendo provisional.
+def cargar_zonas(ruta=RUTA_ZONAS):
+    """Lee el CSV del ETL.
 
     Devuelve (zonas, metadatos):
-    - zonas: {nombre: ([5 variables normalizadas], arriendo COP)}
+    - zonas: {nombre: ([5 variables normalizadas], arriendo estimado COP)}
     - metadatos: {nombre: {"codigo_upz", "localidad", "tipo"}}
 
-    Las UPZ sin localidad o con localidad sin datos provisionales se omiten.
-    `precio` se calcula invirtiendo el arriendo con min-max sobre las zonas
-    cargadas (la más barata = 1, la más cara = 0).
+    Las UPZ sin arriendo estimado se omiten (no se pueden filtrar por presupuesto).
     """
-    provisional = PROVISIONAL_POR_LOCALIDAD if provisional is None else provisional
     ruta = Path(ruta)
     if not ruta.exists():
         raise FileNotFoundError(
             f"No existe {ruta}. Genéralo con: cd src && python3 -m ETL.construir_zonas"
         )
 
-    filas = []
-    with ruta.open(encoding="utf-8") as fh:
-        for fila in csv.DictReader(fh):
-            if fila["localidad"] in provisional:
-                filas.append(fila)
-
-    arriendos = [provisional[f["localidad"]] for f in filas]
-    minimo, maximo = (min(arriendos), max(arriendos)) if arriendos else (0, 0)
-    rango = (maximo - minimo) or 1
-
     zonas, metadatos = {}, {}
-    for f in filas:
-        arriendo = provisional[f["localidad"]]
-        precio = 1 - (arriendo - minimo) / rango
-        nombre = formato_nombre(f["nombre"])
-        zonas[nombre] = (
-            [float(f["transporte"]), float(f["seguridad"]), round(precio, 4),
-             float(f["universidades"]), float(f["verdes"])],
-            arriendo,
-        )
-        metadatos[nombre] = {
-            "codigo_upz": f["codigo_upz"],
-            "localidad": f["localidad"],
-            "tipo": f["tipo"],
-        }
+    with ruta.open(encoding="utf-8") as fh:
+        for f in csv.DictReader(fh):
+            if not f.get("arriendo_estimado"):
+                continue
+            nombre = formato_nombre(f["nombre"])
+            zonas[nombre] = (
+                [float(f[v]) for v in VARIABLES],
+                round(float(f["arriendo_estimado"])),
+            )
+            metadatos[nombre] = {
+                "codigo_upz": f["codigo_upz"],
+                "localidad": f["localidad"],
+                "tipo": f["tipo"],
+            }
     return zonas, metadatos
 
 

@@ -26,6 +26,7 @@ MINIMOS = {
     "delitos_localidad": 20,  # (21: 20 localidades + "Sin localización")
     "ies_snies": 100,        # (129 instituciones, 118 con coordenadas)
     "campus_pot": 250,       # (325 predios)
+    "avaluo_ph": 12000,      # (139.786 registros de todas las vigencias; 14.957 de 2026)
 }
 
 
@@ -152,3 +153,18 @@ def test_sedes_manuales_caen_en_bogota(capas):
     indice = IndiceZonas(capas["upz"], "CODIGO_UPZ")
     fuera = [s["nombre"] for s in universidades.sedes_manuales() if indice.buscar(s["x"], s["y"]) is None]
     assert fuera == ["CORPORACION UNIVERSITARIA TALLER CINCO"]
+
+
+def test_avaluo_2026_cubre_las_upz(capas):
+    """La descarga filtra la vigencia 2026 y todas las UPZ quedan con arriendo estimado."""
+    assert 12_000 <= len(capas["avaluo_ph"]) <= 20_000  # solo 2026, no todas las vigencias
+    filas = construir(capas)
+    assert all(f["arriendo_estimado"] != "" for f in filas)
+    assert sum(f["avaluo_fuente"] == "upz" for f in filas) >= 100
+
+
+def test_precio_tiene_sentido(capas):
+    """Cordura: zonas de estrato alto vs. periferia sur."""
+    por_nombre = {f["nombre"].upper(): f for f in construir(capas)}
+    assert por_nombre["PARDO RUBIO"]["arriendo_estimado"] > por_nombre["ALFONSO LOPEZ"]["arriendo_estimado"]
+    assert por_nombre["BOSA CENTRAL"]["precio"] > por_nombre["CHAPINERO"]["precio"]
