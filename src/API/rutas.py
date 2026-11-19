@@ -4,6 +4,8 @@ Cada ruta recibe un dict con los parámetros de la query string y devuelve un
 dict serializable a JSON. Los parámetros inválidos lanzan `ErrorParametros`
 (el servidor responde 400).
 """
+import json
+
 from KNN import knn
 
 # ¿Buscas que sea zona industrial?  sí / no / sin preferencia
@@ -14,6 +16,13 @@ PRESUPUESTO_MAXIMO = 10_000_000_000
 
 class ErrorParametros(ValueError):
     """Parámetro faltante o fuera de rango."""
+
+
+class ErrorNoDisponible(LookupError):
+    """El recurso pedido no existe (el servidor responde 404)."""
+
+
+RUTA_GEOJSON_UPZ = knn.RUTA_ZONAS.with_name("upz.geojson")
 
 
 def _entero(params, nombre, minimo, maximo, defecto=None):
@@ -79,7 +88,18 @@ def recomendar(params):
     }
 
 
+def upz(_params=None, ruta=None):
+    """GET /api/upz: polígonos de las UPZ (GeoJSON en lon/lat) para el mapa."""
+    ruta = RUTA_GEOJSON_UPZ if ruta is None else ruta
+    if not ruta.exists():
+        raise ErrorNoDisponible(
+            "No existe data/upz.geojson. Genéralo con: cd src && python3 -m ETL.construir_zonas"
+        )
+    return json.loads(ruta.read_text(encoding="utf-8"))
+
+
 RUTAS = {
     "/api/zonas": zonas,
     "/api/recomendar": recomendar,
+    "/api/upz": upz,
 }

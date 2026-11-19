@@ -41,6 +41,9 @@ class Manejador(SimpleHTTPRequestHandler):
         except rutas.ErrorParametros as e:
             self._json(400, {"error": str(e)})
             return
+        except rutas.ErrorNoDisponible as e:
+            self._json(404, {"error": str(e)})
+            return
         self._json(200, cuerpo)
 
     def _json(self, estado, cuerpo):

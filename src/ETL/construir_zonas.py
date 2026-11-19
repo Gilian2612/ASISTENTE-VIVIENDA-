@@ -30,15 +30,20 @@ una (estimada por muestreo en grilla), para no contar dos veces los m².
 Uso:  cd src && python3 -m ETL.construir_zonas [ruta_salida.csv]
 """
 import csv
+import json
 import math
 import sys
 from pathlib import Path
 
 from ETL import calibracion, fuentes, precio, seguridad, universidades
-from ETL.geometria import area, caja, centroide, en_caja, poligonos, punto_en_poligono
+from ETL.geometria import (
+    a_wgs84, area, caja, centroide, en_caja, poligonos, punto_en_poligono, simplificar,
+)
 from ETL.tipos_upz import RESIDENCIAL, tipo_de
 
 RUTA_SALIDA = Path(__file__).resolve().parents[2] / "data" / "zonas.csv"
+# Polígonos de las UPZ en WGS84 (lon/lat) para el mapa del front.
+RUTA_GEOJSON = RUTA_SALIDA.with_name("upz.geojson")
 
 COLUMNAS = [
     "codigo_upz", "nombre", "localidad", "tipo", "area_km2",
@@ -298,6 +303,34 @@ def escribir_csv(filas, ruta, columnas=None):
         escritor.writerows(filas)
 
 
+# Tolerancia (m) para simplificar los polígonos del mapa.
+TOLERANCIA_MAPA_M = 5
+
+
+def geojson_upz(upz, tolerancia=TOLERANCIA_MAPA_M):
+    """FeatureCollection de las UPZ en WGS84 con `codigo_upz` y `nombre`.
+
+    Los polígonos se simplifican (Douglas-Peucker, `tolerancia` en metros) y
+    se redondean a 5 decimales (~1 m): bastan para dibujar el mapa y el
+    archivo pesa mucho menos.
+    """
+    features = [
+        {"type": "Feature",
+         "properties": {"codigo_upz": str(f["properties"]["CODIGO_UPZ"]),
+                        "nombre": f["properties"]["NOMBRE"]},
+         "geometry": a_wgs84(simplificar(f["geometry"], tolerancia), decimales=5)}
+        for f in upz if f.get("geometry")
+    ]
+    features.sort(key=lambda f: _orden_codigo(f["properties"]))
+    return {"type": "FeatureCollection", "features": features}
+
+
+def escribir_geojson(coleccion, ruta):
+    ruta = Path(ruta)
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(json.dumps(coleccion, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
 def main(argv=None):  # pragma: no cover - requiere red; cubierto por tests de integración
     argv = sys.argv[1:] if argv is None else argv
     ruta = Path(argv[0]) if argv else RUTA_SALIDA
@@ -310,7 +343,8 @@ def main(argv=None):  # pragma: no cover - requiere red; cubierto por tests de i
     resultado, errores = calibracion.calibrar(filas)
     print(calibracion.reporte(resultado, errores))
     escribir_csv(filas, ruta)
-    print(f"{len(filas)} UPZ escritas en {ruta}")
+    escribir_geojson(geojson_upz(capas["upz"]), ruta.with_name("upz.geojson"))
+    print(f"{len(filas)} UPZ escritas en {ruta} (+ polígonos en upz.geojson)")
 
 
 if __name__ == "__main__":  # pragma: no cover

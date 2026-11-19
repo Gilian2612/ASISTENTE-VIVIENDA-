@@ -456,3 +456,28 @@ class TestPrecioEnConstruir:
         assert all(f["arriendo_estimado"] == f["arriendo_avaluo"] == "" for f in filas)
         assert all(f["avaluo_fuente"] == "" for f in filas)
         assert all(f["precio"] == 0.5 for f in filas)
+
+
+class TestGeojsonUpz:
+    """Polígonos de las UPZ en lon/lat para el mapa del front."""
+
+    @pytest.mark.unit
+    def test_coleccion_en_wgs84_ordenada(self):
+        from ETL.construir_zonas import geojson_upz
+        upz = [poligono({"CODIGO_UPZ": "10", "NOMBRE": "B"}, cuadrado(5_000_000, 2_000_000, 1000)),
+               poligono({"CODIGO_UPZ": "2", "NOMBRE": "A"}, cuadrado(5_001_000, 2_000_000, 1000)),
+               poligono({"CODIGO_UPZ": "3", "NOMBRE": "X"}, None)]
+        c = geojson_upz(upz)
+        assert c["type"] == "FeatureCollection"
+        assert [f["properties"] for f in c["features"]] == [
+            {"codigo_upz": "2", "nombre": "A"}, {"codigo_upz": "10", "nombre": "B"}]
+        lon, lat = c["features"][1]["geometry"]["coordinates"][0][0]
+        assert (lon, lat) == (-73.0, 4.0)
+
+    @pytest.mark.unit
+    def test_escribir_geojson(self, tmp_path):
+        import json
+        from ETL.construir_zonas import escribir_geojson
+        ruta = tmp_path / "sub" / "upz.geojson"
+        escribir_geojson({"type": "FeatureCollection", "features": []}, ruta)
+        assert json.loads(ruta.read_text(encoding="utf-8")) == {"type": "FeatureCollection", "features": []}

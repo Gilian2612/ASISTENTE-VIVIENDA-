@@ -177,3 +177,36 @@ class TestServidor:
     def test_no_sirve_archivos_fuera_del_front(self, url_base):
         estado, _, cuerpo = get(url_base + "/../KNN/knn.py")
         assert b"PROVISIONAL_POR_LOCALIDAD" not in cuerpo
+
+
+class TestUpz:
+    """GET /api/upz: polígonos para el mapa."""
+
+    @pytest.mark.unit
+    def test_devuelve_el_geojson_del_repo(self):
+        datos = rutas.upz()
+        assert datos["type"] == "FeatureCollection"
+        codigos = {f["properties"]["codigo_upz"] for f in datos["features"]}
+        assert {m["codigo_upz"] for m in knn.METADATOS.values()} <= codigos
+
+    @pytest.mark.unit
+    def test_sin_archivo_lanza_no_disponible(self, tmp_path):
+        with pytest.raises(rutas.ErrorNoDisponible, match="ETL.construir_zonas"):
+            rutas.upz(ruta=tmp_path / "no.geojson")
+
+    @pytest.mark.unit
+    def test_servidor_upz(self, url_base):
+        estado, cabeceras, cuerpo = get(url_base + "/api/upz")
+        assert estado == 200 and cabeceras["Content-Type"].startswith("application/json")
+        assert len(json.loads(cuerpo)["features"]) >= 112
+
+    @pytest.mark.unit
+    def test_servidor_upz_404_si_falta(self, url_base, monkeypatch, tmp_path):
+        monkeypatch.setattr(rutas, "RUTA_GEOJSON_UPZ", tmp_path / "no.geojson")
+        estado, _, cuerpo = get(url_base + "/api/upz")
+        assert estado == 404 and "upz.geojson" in json.loads(cuerpo)["error"]
+
+    @pytest.mark.unit
+    def test_front_incluye_el_mapa(self, url_base):
+        _, _, cuerpo = get(url_base + "/")
+        assert b"leaflet" in cuerpo and b"/api/upz" in cuerpo and b'id="mapa"' in cuerpo

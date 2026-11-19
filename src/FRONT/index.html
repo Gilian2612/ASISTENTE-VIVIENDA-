@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sugerencias de Vivienda en Bogotá — Prototipo PTIA</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root {
     --rojo: #1d4ed8;
@@ -161,6 +163,12 @@
   .dato { background: var(--gris-claro); border-radius: 8px; padding: 12px; }
   .dato .k { font-size: .75rem; color: var(--gris); text-transform: uppercase; letter-spacing: .04em; }
   .dato .v { font-size: 1.1rem; font-weight: 600; }
+  .mapa {
+    height: 340px;
+    border-radius: 10px;
+    border: 1px solid var(--borde);
+    z-index: 0;
+  }
   .mapa-sim {
     height: 180px;
     border: 2px dashed var(--borde);
@@ -546,7 +554,8 @@ function verDetalle(idx, sim) {
 
     <div class="tarjeta">
       <h3 style="margin-bottom:12px">Ubicación</h3>
-      <div class="mapa-sim">🗺️ Mapa de la zona<br><small>(Simulado. Disponible en la versión funcional.)</small></div>
+      <div id="mapa" class="mapa"></div>
+      <p class="sub" style="margin:8px 0 0;font-size:.8125rem">Límite oficial de la UPZ (Catastro Bogotá / IDECA). Mapa base © OpenStreetMap.</p>
     </div>
 
     <div class="acciones">
@@ -555,6 +564,55 @@ function verDetalle(idx, sim) {
       <button class="btn sec" onclick="simulado('Ver inmuebles disponibles')">🏠 Ver inmuebles disponibles</button>
     </div>`;
   ir("detalle");
+  pintarMapa(z);
+}
+
+// ------------------------------------------------------------------
+// Mapa de la zona (Leaflet + polígonos de /api/upz)
+// ------------------------------------------------------------------
+let UPZ_GEO = null;
+let mapaDetalle = null;
+
+function mensajeMapa(cont, texto) {
+  cont.className = "mapa-sim";
+  cont.textContent = texto;
+}
+
+async function pintarMapa(z) {
+  const cont = document.getElementById("mapa");
+  if (!cont) return;
+  if (typeof L === "undefined") {
+    mensajeMapa(cont, "🗺️ No se pudo cargar la librería del mapa (¿sin conexión a internet?).");
+    return;
+  }
+  try {
+    if (!UPZ_GEO) UPZ_GEO = await pedirJSON("/api/upz");
+  } catch (e) {
+    mensajeMapa(cont, "🗺️ No se pudieron cargar los límites de las UPZ: " + e.message);
+    return;
+  }
+  const feature = UPZ_GEO.features.find(f => f.properties.codigo_upz === String(z.codigo_upz));
+  if (mapaDetalle) { mapaDetalle.remove(); mapaDetalle = null; }
+  mapaDetalle = L.map(cont, { scrollWheelZoom: false });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(mapaDetalle);
+  // Contexto: todas las UPZ en gris; la elegida resaltada.
+  L.geoJSON(UPZ_GEO, {
+    style: { color: "#94a3b8", weight: 1, fillOpacity: 0 },
+    interactive: false,
+  }).addTo(mapaDetalle);
+  if (!feature) {
+    mapaDetalle.fitBounds(L.geoJSON(UPZ_GEO).getBounds());
+    return;
+  }
+  const capa = L.geoJSON(feature, {
+    style: { color: "#1d4ed8", weight: 3, fillColor: "#1d4ed8", fillOpacity: 0.15 },
+  }).addTo(mapaDetalle);
+  capa.bindTooltip(`UPZ ${esc(z.codigo_upz)} · ${esc(z.nombre)}`, { sticky: true });
+  mapaDetalle.fitBounds(capa.getBounds(), { padding: [20, 20] });
+  setTimeout(() => mapaDetalle && mapaDetalle.invalidateSize(), 0);
 }
 
 function irComparando(idx) {
