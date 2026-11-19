@@ -318,21 +318,23 @@ class TestRecomendar:
 
 # ------------------------------------------------------------ cargar_zonas
 def escribir_csv_zonas(ruta, filas):
-    columnas = ["codigo_upz", "nombre", "localidad", "tipo", "transporte", "seguridad", "verdes"]
+    columnas = ["codigo_upz", "nombre", "localidad", "tipo", "transporte", "seguridad", "universidades", "verdes"]
     with ruta.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=columnas)
         w.writeheader()
         w.writerows(filas)
 
 
-def fila(codigo, nombre, localidad, tipo="residencial", transporte=0.5, seguridad=0.5, verdes=0.5):
-    return {"codigo_upz": codigo, "nombre": nombre, "localidad": localidad,
-            "tipo": tipo, "transporte": transporte, "seguridad": seguridad, "verdes": verdes}
+def fila(codigo, nombre, localidad, tipo="residencial", transporte=0.5, seguridad=0.5,
+         universidades=0.5, verdes=0.5):
+    return {"codigo_upz": codigo, "nombre": nombre, "localidad": localidad, "tipo": tipo,
+            "transporte": transporte, "seguridad": seguridad, "universidades": universidades,
+            "verdes": verdes}
 
 
 PROVISIONAL_PRUEBA = {
-    "CARA":   (0.9, 3_000_000),
-    "BARATA": (0.1, 1_000_000),
+    "CARA":   3_000_000,
+    "BARATA": 1_000_000,
 }
 
 
@@ -341,9 +343,10 @@ class TestCargarZonas:
 
     @pytest.mark.unit
     def test_combina_csv_y_provisional(self, tmp_path):
-        """transporte/seguridad/verdes vienen del CSV; universidades/arriendo, del provisional."""
+        """transporte/seguridad/universidades/verdes vienen del CSV; el arriendo, del provisional."""
         ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("1", "ZONA UNO", "CARA", transporte=0.7, seguridad=0.8, verdes=0.3)])
+        escribir_csv_zonas(ruta, [fila("1", "ZONA UNO", "CARA", transporte=0.7, seguridad=0.8,
+                                       universidades=0.9, verdes=0.3)])
         zonas, meta = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
         vector, arriendo = zonas["Zona Uno"]
         assert vector[0] == 0.7 and vector[4] == 0.3
@@ -392,7 +395,7 @@ class TestCargarZonas:
         ruta = tmp_path / "zonas.csv"
         escribir_csv_zonas(ruta, [fila("99", "CHAPINERO", "CHAPINERO")])
         zonas, _ = cargar_zonas(ruta)
-        assert zonas["Chapinero"][1] == PROVISIONAL_POR_LOCALIDAD["CHAPINERO"][1]
+        assert zonas["Chapinero"][1] == PROVISIONAL_POR_LOCALIDAD["CHAPINERO"]
 
 
 # ------------------------------------------------- preferencia industrial

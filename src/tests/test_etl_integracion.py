@@ -24,6 +24,8 @@ MINIMOS = {
     "parques": 3000,       # (5262)
     "incidentes_upz": 112,   # (117: 112 UPZ + 4 UPR + "Sin localización")
     "delitos_localidad": 20,  # (21: 20 localidades + "Sin localización")
+    "ies_snies": 100,        # (129 instituciones, 118 con coordenadas)
+    "campus_pot": 250,       # (325 predios)
 }
 
 
@@ -44,7 +46,7 @@ def test_capa_acepta_la_consulta_del_etl(nombre):
         "where": "1=1",
         "outFields": ",".join(fuentes.CAMPOS[nombre]),
         "outSR": arcgis.SR_METROS,
-        "orderByFields": "OBJECTID",
+        "orderByFields": fuentes.ORDEN.get(nombre, "OBJECTID"),
         "resultOffset": 0,
         "resultRecordCount": 1,
         "returnGeometry": "false" if nombre in fuentes.SIN_GEOMETRIA else "true",
@@ -132,3 +134,21 @@ def test_seguridad_tiene_sentido(capas):
     por_nombre = {f["nombre"].upper(): f for f in construir(capas)}
     assert por_nombre["COUNTRY CLUB"]["seguridad"] > por_nombre["CORABASTOS"]["seguridad"]
     assert por_nombre["NIZA"]["seguridad"] > por_nombre["PATIO BONITO"]["seguridad"]
+
+
+def test_universidades_tienen_sentido(capas):
+    """Cordura: el corredor universitario (Chapinero, Teusaquillo) vs. la periferia."""
+    por_nombre = {f["nombre"].upper(): f for f in construir(capas)}
+    assert por_nombre["CHAPINERO"]["universidades_2km"] >= 20
+    assert por_nombre["TEUSAQUILLO"]["universidades"] > por_nombre["BOSA CENTRAL"]["universidades"]
+    assert all(0 <= f["universidades"] <= 1 for f in por_nombre.values())
+
+
+def test_sedes_manuales_caen_en_bogota(capas):
+    """Las sedes ubicadas a mano caen dentro de alguna UPZ (salvo Taller Cinco, en Chía)."""
+    from ETL import universidades
+    from ETL.construir_zonas import IndiceZonas
+
+    indice = IndiceZonas(capas["upz"], "CODIGO_UPZ")
+    fuera = [s["nombre"] for s in universidades.sedes_manuales() if indice.buscar(s["x"], s["y"]) is None]
+    assert fuera == ["CORPORACION UNIVERSITARIA TALLER CINCO"]

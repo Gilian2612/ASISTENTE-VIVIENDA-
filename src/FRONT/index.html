@@ -311,7 +311,7 @@ const VARIABLES = [
   { id: "transporte",    nombre: "Transporte público",      desc: "Estaciones TransMilenio y paraderos SITP por km²", si: "Transporte",      no: "Poco transporte" },
   { id: "seguridad",     nombre: "Seguridad",               desc: "Incidentes 123 por UPZ y delitos por localidad (SDSCJ)", si: "Seguro",          no: "Inseguro" },
   { id: "precio",        nombre: "Precio de arriendo",      desc: "Arriendo estimado por localidad",           si: "Precio bajo",     no: "Precio alto" },
-  { id: "universidades", nombre: "Cercanía a universidades", desc: "Estimado por localidad",                   si: "Universidad cerca", no: "Lejos de universidades" },
+  { id: "universidades", nombre: "Cercanía a universidades", desc: "Sedes a 2 km o menos (SNIES + POT)",      si: "Universidad cerca", no: "Lejos de universidades" },
   { id: "verdes",        nombre: "Zonas verdes / parques",  desc: "% del área en parques del IDRD",            si: "Parques",         no: "Pocas zonas verdes" },
 ];
 
@@ -357,8 +357,8 @@ async function cargarZonas() {
     VARIABLES.forEach(v => v.provisional = datos.provisionales.includes(v.id));
     pintarSliders();
     aviso.innerHTML = `${ZONAS.length} UPZ reales. Transporte y zonas verdes: Catastro Bogotá / IDECA. ` +
-      `Seguridad: Secretaría Distrital de Seguridad (SDSCJ). ` +
-      `<b>Universidades y arriendo son provisionales</b> (estimados por localidad).`;
+      `Seguridad: Secretaría Distrital de Seguridad (SDSCJ). Universidades: SNIES y POT (SDP). ` +
+      `<b>El arriendo es provisional</b> (estimado por localidad).`;
     document.getElementById("btn-recomendar").disabled = false;
   } catch (e) {
     aviso.classList.add("error");
