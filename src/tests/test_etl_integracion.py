@@ -22,6 +22,8 @@ MINIMOS = {
     "portales_tm": 5,      # (9)
     "paraderos_sitp": 5000,  # (7496)
     "parques": 3000,       # (5262)
+    "incidentes_upz": 112,   # (117: 112 UPZ + 4 UPR + "Sin localización")
+    "delitos_localidad": 20,  # (21: 20 localidades + "Sin localización")
 }
 
 
@@ -45,10 +47,14 @@ def test_capa_acepta_la_consulta_del_etl(nombre):
         "orderByFields": "OBJECTID",
         "resultOffset": 0,
         "resultRecordCount": 1,
+        "returnGeometry": "false" if nombre in fuentes.SIN_GEOMETRIA else "true",
         "f": "geojson",
     })
     (f,) = datos["features"]
-    assert f["geometry"]["type"] in {"Point", "Polygon", "MultiPolygon"}
+    if nombre in fuentes.SIN_GEOMETRIA:
+        assert f["geometry"] is None
+    else:
+        assert f["geometry"]["type"] in {"Point", "Polygon", "MultiPolygon"}
     for campo in fuentes.CAMPOS[nombre]:
         assert campo in f["properties"]
 
@@ -111,3 +117,18 @@ def test_parques_que_cruzan_limites_cuentan_en_varias_upz(capas):
     assert sum(conteo.values()) > len([p for p in capas["parques"] if p.get("geometry")]) * 0.9
     area_total = sum(area(p["geometry"]) for p in capas["parques"] if p.get("geometry"))
     assert sum(areas.values()) <= area_total * 1.001
+
+
+def test_seguridad_cubre_todas_las_upz(capas):
+    """Las 112 UPZ tienen incidentes 123 propios y delitos de su localidad (SDSCJ)."""
+    filas = construir(capas)
+    assert all(f["incidentes_123"] != "" for f in filas), "UPZ sin incidentes 123"
+    assert all(f["delitos_localidad"] != "" for f in filas), "UPZ sin delitos de localidad"
+    assert all(0 <= f["seguridad"] <= 1 for f in filas)
+
+
+def test_seguridad_tiene_sentido(capas):
+    """Cordura: zonas residenciales tranquilas del norte vs. zonas de alta incidencia."""
+    por_nombre = {f["nombre"].upper(): f for f in construir(capas)}
+    assert por_nombre["COUNTRY CLUB"]["seguridad"] > por_nombre["CORABASTOS"]["seguridad"]
+    assert por_nombre["NIZA"]["seguridad"] > por_nombre["PATIO BONITO"]["seguridad"]

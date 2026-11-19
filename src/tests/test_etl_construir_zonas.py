@@ -41,6 +41,18 @@ UPZ_B = poligono({"CODIGO_UPZ": "10", "NOMBRE": "B"}, cuadrado(KM, 0, KM))
 LOCALIDAD = poligono({"LOCNOMBRE": "LOC1"}, cuadrado(-1, -1, 2 * KM + 2))
 
 
+def incidentes(codigo, por_anio):
+    """Feature de la capa 3 (incidentes 123 por UPZ) con `por_anio` hurtos en 2025 y 2026."""
+    return {"type": "Feature", "geometry": None,
+            "properties": {"CMIUUPLA": codigo, "CMH25CONT": por_anio, "CMH26CONT": por_anio}}
+
+
+def delitos(localidad, por_anio):
+    """Feature de la capa 0 (delitos por localidad) con `por_anio` homicidios en 2025 y 2026."""
+    return {"type": "Feature", "geometry": None,
+            "properties": {"CMNOMLOCAL": localidad, "CMH25CONT": por_anio, "CMH26CONT": por_anio}}
+
+
 def capas_base(**cambios):
     capas = {
         "upz": [UPZ_A, UPZ_B],
@@ -49,6 +61,9 @@ def capas_base(**cambios):
         "portales_tm": [punto(1500, 500)],                    # 1 en B
         "paraderos_sitp": [punto(1100, 100), punto(1200, 100), punto(5000, 5000)],  # 2 en B, 1 fuera
         "parques": [poligono({}, cuadrado(100, 100, 500))],   # 250.000 m² en A
+        # SDSCJ: A con 10 incidentes/año, B con 100; LOC1 con 50 delitos/año.
+        "incidentes_upz": [incidentes("UPZ2", 10), incidentes("UPZ10", 100), incidentes("UPR1", 999)],
+        "delitos_localidad": [delitos("Loc1", 50), delitos("Sin Localización", 9)],
     }
     capas.update(cambios)
     return capas
@@ -304,3 +319,47 @@ class TestEscribirCsv:
             leidas = list(csv.DictReader(fh))
         assert list(leidas[0]) == COLUMNAS
         assert [r["codigo_upz"] for r in leidas] == ["2", "10"]
+
+
+class TestSeguridadEnConstruir:
+    """La variable `seguridad` combina incidentes por UPZ (70 %) y delitos por localidad (30 %)."""
+
+    @pytest.mark.unit
+    def test_columnas_de_seguridad(self):
+        a, b = construir(capas_base())
+        assert (a["incidentes_123"], b["incidentes_123"]) == (10, 100)
+        assert a["incidentes_123_km2"] == pytest.approx(10)
+        assert a["delitos_localidad"] == b["delitos_localidad"] == 50
+
+    @pytest.mark.unit
+    def test_mas_incidentes_menos_seguridad(self):
+        a, b = construir(capas_base())
+        assert a["seguridad"] > b["seguridad"]
+        assert all(0 <= f["seguridad"] <= 1 for f in (a, b))
+
+    @pytest.mark.unit
+    def test_valor_combinado(self):
+        # Riesgo UPZ normalizado: A = 0.1, B = 1 → seguridad 0.9 y 0; misma
+        # localidad → riesgo 1 → seguridad 0.  A = 0.7*0.9 + 0.3*0 = 0.63.
+        a, b = construir(capas_base())
+        assert a["seguridad"] == pytest.approx(0.63)
+        assert b["seguridad"] == pytest.approx(0.0)
+
+    @pytest.mark.unit
+    def test_upz_sin_dato_usa_solo_la_localidad(self):
+        a, b = construir(capas_base(incidentes_upz=[incidentes("UPZ2", 10)]))
+        assert b["incidentes_123"] == "" and b["incidentes_123_km2"] == ""
+        assert b["seguridad"] == pytest.approx(0.0)  # solo localidad (riesgo 1)
+
+    @pytest.mark.unit
+    def test_sin_ningun_dato_queda_neutral(self):
+        filas = construir(capas_base(incidentes_upz=[], delitos_localidad=[]))
+        assert all(f["seguridad"] == 0.5 for f in filas)
+        assert all(f["delitos_localidad"] == "" for f in filas)
+
+    @pytest.mark.unit
+    def test_localidad_sin_geometria_se_ignora(self):
+        sin_geom = poligono({"LOCNOMBRE": "OTRA"}, None)
+        a, _ = construir(capas_base(localidades=[LOCALIDAD, sin_geom]))
+        assert a["localidad"] == "LOC1"
+        assert a["delitos_localidad_km2"] != ""

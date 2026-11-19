@@ -5,8 +5,10 @@ Variables disponibles hoy (fuentes oficiales, ver `ETL.fuentes`):
 - verdes: % del área de la UPZ ocupada por parques del sistema distrital.
 - localidad: localidad donde cae el centroide de la UPZ.
 - tipo: industrial / dotacional / residencial (tabla hardcodeada, `ETL.tipos_upz`).
+- seguridad: 70 % incidentes 123 por UPZ + 30 % delitos de alto impacto por
+  localidad, por km², promedio 2025-2026 (SDSCJ, ver `ETL.seguridad`).
 
-Pendientes (sin fuente abierta verificada): seguridad, precio, universidades.
+Pendientes (sin fuente abierta verificada): precio, universidades.
 
 Normalización: cada indicador se divide por su percentil 95 (calculado solo
 sobre las UPZ residenciales) y se recorta a [0, 1], así los valores extremos
@@ -23,7 +25,7 @@ import math
 import sys
 from pathlib import Path
 
-from ETL import fuentes
+from ETL import fuentes, seguridad
 from ETL.geometria import area, caja, centroide, en_caja, poligonos, punto_en_poligono
 from ETL.tipos_upz import RESIDENCIAL, tipo_de
 
@@ -33,7 +35,8 @@ COLUMNAS = [
     "codigo_upz", "nombre", "localidad", "tipo", "area_km2",
     "estaciones_tm", "paraderos_sitp", "estaciones_tm_km2", "paraderos_sitp_km2",
     "parques", "area_parques_m2", "verde_pct",
-    "transporte", "verdes",
+    "incidentes_123", "incidentes_123_km2", "delitos_localidad", "delitos_localidad_km2",
+    "transporte", "seguridad", "verdes",
 ]
 
 # Puntos de muestreo (aprox.) por parque para repartir su área entre UPZ.
@@ -166,6 +169,14 @@ def construir(capas):
     sitp = contar_puntos(indice_upz, capas["paraderos_sitp"])
     parques, n_parques = repartir_parques(indice_upz, capas["parques"])
 
+    incidentes = seguridad.incidentes_por_upz(capas["incidentes_upz"])
+    delitos = seguridad.delitos_por_localidad(capas["delitos_localidad"])
+    area_loc_km2 = {}
+    for f in capas["localidades"]:
+        if f.get("geometry"):
+            clave = seguridad.clave_localidad(f["properties"]["LOCNOMBRE"])
+            area_loc_km2[clave] = area_loc_km2.get(clave, 0.0) + area(f["geometry"]) / 1e6
+
     filas = []
     for f in upz:
         codigo = f["properties"]["CODIGO_UPZ"]
@@ -173,10 +184,19 @@ def construir(capas):
         area_km2 = area_m2 / 1e6
         n_tm, n_sitp = tm.get(codigo, 0), sitp.get(codigo, 0)
         verde = parques.get(codigo, 0.0)
+        localidad = indice_loc.buscar_poligono(f["geometry"]) or ""
+        clave_loc = seguridad.clave_localidad(localidad)
+        n_inc = incidentes.get(str(codigo))
+        n_del = delitos.get(clave_loc)
+        km2_loc = area_loc_km2.get(clave_loc)
         filas.append({
             "codigo_upz": codigo,
             "nombre": f["properties"]["NOMBRE"],
-            "localidad": indice_loc.buscar_poligono(f["geometry"]) or "",
+            "localidad": localidad,
+            "incidentes_123": "" if n_inc is None else round(n_inc, 1),
+            "incidentes_123_km2": "" if n_inc is None or not area_km2 else round(n_inc / area_km2, 2),
+            "delitos_localidad": "" if n_del is None else round(n_del, 1),
+            "delitos_localidad_km2": "" if n_del is None or not km2_loc else round(n_del / km2_loc, 2),
             "tipo": tipo_de(codigo),
             "area_km2": round(area_km2, 3),
             "estaciones_tm": n_tm,
@@ -203,6 +223,19 @@ def construir(capas):
         r["transporte"] = round((a + b) / 2, 4)
         r["verdes"] = round(v, 4)
 
+    # Seguridad = 1 - riesgo normalizado; las UPZ sin dato quedan en None
+    # y `seguridad.combinar` usa el otro componente.
+    def seguridad_desde(campo):
+        con_dato = [r for r in filas if r[campo] != ""]
+        riesgo = normalizar([r[campo] for r in con_dato],
+                            referencia=[r[campo] for r in con_dato if r["tipo"] == RESIDENCIAL])
+        valores = {id(r): 1 - x for r, x in zip(con_dato, riesgo)}
+        return [valores.get(id(r)) for r in filas]
+
+    for r, s_upz, s_loc in zip(filas, seguridad_desde("incidentes_123_km2"),
+                               seguridad_desde("delitos_localidad_km2")):
+        r["seguridad"] = round(seguridad.combinar(s_upz, s_loc), 4)
+
     filas.sort(key=_orden_codigo)
     return filas
 
@@ -225,7 +258,7 @@ def escribir_csv(filas, ruta):
 def main(argv=None):  # pragma: no cover - requiere red; cubierto por tests de integración
     argv = sys.argv[1:] if argv is None else argv
     ruta = Path(argv[0]) if argv else RUTA_SALIDA
-    print("Descargando capas de Catastro Bogotá / IDECA...")
+    print("Descargando capas de Catastro Bogotá / IDECA y SDSCJ...")
     capas = fuentes.descargar_todo()
     for nombre, features in capas.items():
         print(f"  {nombre}: {len(features)}")
