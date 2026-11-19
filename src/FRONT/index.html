@@ -212,6 +212,14 @@
   .aviso.error { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
   .btn:disabled { opacity: .5; cursor: wait; }
 
+  /* Búsquedas guardadas */
+  .guardada { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+              padding: 10px 0; border-bottom: 1px solid var(--borde); flex-wrap: wrap; }
+  .guardada:last-child { border-bottom: none; }
+  .guardada .info { font-size: .875rem; color: var(--gris); }
+  .guardada .info b { color: var(--texto); }
+  a.btn { display: inline-block; text-decoration: none; }
+
   .toast {
     position: fixed;
     bottom: 24px;
@@ -271,6 +279,12 @@
       <button class="btn" id="btn-recomendar" onclick="recomendar()" disabled>Ver barrios recomendados →</button>
       <button class="btn sec" onclick="restablecer()">Restablecer</button>
     </div>
+
+    <div class="tarjeta" id="tarjeta-guardadas" style="display:none;margin-top:24px">
+      <h3 style="margin-bottom:6px">💾 Búsquedas guardadas</h3>
+      <p class="sub" style="margin-bottom:6px">Se guardan solo en este navegador.</p>
+      <div id="lista-guardadas"></div>
+    </div>
   </section>
 
   <!-- CU2: Ver barrios recomendados -->
@@ -284,7 +298,8 @@
     </div>
     <div class="acciones" style="margin-top:18px">
       <button class="btn sec" onclick="ir('preferencias')">← Ajustar preferencias</button>
-      <button class="btn sec" onclick="simulado('Guardar búsqueda')">💾 Guardar búsqueda</button>
+      <button class="btn sec" onclick="guardarBusqueda()">💾 Guardar búsqueda</button>
+      <button class="btn sec" onclick="copiarEnlace()">🔗 Copiar enlace de la búsqueda</button>
     </div>
   </section>
 
@@ -471,6 +486,10 @@ async function recomendar() {
     boton.disabled = false;
   }
   seleccion.clear();
+  ultimaBusqueda = {
+    pesos: { ...pesos }, presupuesto, industrial,
+    top: resultados.map(r => r.zona.nombre),
+  };
 
   document.getElementById("resumen-perfil").innerHTML =
     "Tu perfil: " + VARIABLES.map(v => `${v.nombre} <b>${pesos[v.id]}</b>`).join(" · ") +
@@ -558,10 +577,21 @@ function verDetalle(idx, sim) {
       <p class="sub" style="margin:8px 0 0;font-size:.8125rem">Límite oficial de la UPZ (Catastro Bogotá / IDECA). Mapa base © OpenStreetMap.</p>
     </div>
 
+    <div class="tarjeta">
+      <h3 style="margin-bottom:6px">🏠 Inmuebles disponibles</h3>
+      <p class="sub" style="margin-bottom:12px">Abre la búsqueda de apartamentos en arriendo en cada portal (pestaña nueva). Si el portal no reconoce la UPZ, usa la búsqueda por localidad.</p>
+      ${enlacesInmuebles(z).map(g => `
+        <div class="var-fila">
+          <div class="cab" style="margin-bottom:6px"><span>${g.titulo}</span></div>
+          <div class="acciones" style="margin-top:0">
+            ${g.enlaces.map(e => `<a class="btn peq sec" href="${e.url}" target="_blank" rel="noopener noreferrer">${e.portal} ↗</a>`).join("")}
+          </div>
+        </div>`).join("")}
+    </div>
+
     <div class="acciones">
       <button class="btn sec" onclick="ir('resultados')">← Volver a recomendados</button>
       <button class="btn sec" onclick="irComparando(${idx})">Comparar con otra zona</button>
-      <button class="btn sec" onclick="simulado('Ver inmuebles disponibles')">🏠 Ver inmuebles disponibles</button>
     </div>`;
   ir("detalle");
   pintarMapa(z);
@@ -685,13 +715,151 @@ function toast(msg) {
   clearTimeout(t._h);
   t._h = setTimeout(() => t.classList.remove("visible"), 2600);
 }
-function simulado(nombre) {
-  toast(`«${nombre}»: función simulada, disponible en la versión funcional.`);
+
+// ------------------------------------------------------------------
+// Ver inmuebles disponibles: enlaces a Metrocuadrado y Fincaraíz
+// (solo se abre la búsqueda del portal; no se extraen datos).
+// ------------------------------------------------------------------
+function slug(texto) {
+  return String(texto).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function urlsPortales(zona) {
+  const s = slug(zona);
+  return [
+    { portal: "Metrocuadrado", url: `https://www.metrocuadrado.com/apartamentos/arriendo/bogota/${s}/` },
+    { portal: "Fincaraíz", url: `https://www.fincaraiz.com.co/arriendo/apartamentos/${s}/bogota` },
+  ];
+}
+
+function enlacesInmuebles(z) {
+  const grupos = [{ titulo: `En la UPZ ${esc(z.nombre)}`, enlaces: urlsPortales(z.nombre) }];
+  if (z.localidad && slug(z.localidad) !== slug(z.nombre)) {
+    grupos.push({ titulo: `En la localidad ${esc(z.localidad)}`, enlaces: urlsPortales(z.localidad) });
+  }
+  return grupos;
+}
+
+// ------------------------------------------------------------------
+// Guardar búsqueda (localStorage) y enlace para compartir (?t=..&b=..)
+// ------------------------------------------------------------------
+const CLAVE_GUARDADAS = "asistente-vivienda:busquedas";
+const MAX_GUARDADAS = 10;
+const PARAM = { transporte: "t", seguridad: "s", precio: "p", universidades: "u", verdes: "v" };
+let ultimaBusqueda = null;
+
+function leerGuardadas() {
+  try {
+    const datos = JSON.parse(localStorage.getItem(CLAVE_GUARDADAS) || "[]");
+    return Array.isArray(datos) ? datos : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function escribirGuardadas(lista) {
+  try {
+    localStorage.setItem(CLAVE_GUARDADAS, JSON.stringify(lista));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+const claveBusqueda = b => JSON.stringify([VARIABLES.map(v => b.pesos[v.id]), b.presupuesto, b.industrial]);
+
+function guardarBusqueda() {
+  if (!ultimaBusqueda) { toast("Primero haz una búsqueda."); return; }
+  const lista = leerGuardadas().filter(b => claveBusqueda(b) !== claveBusqueda(ultimaBusqueda));
+  lista.unshift({ ...ultimaBusqueda, id: Date.now(), fecha: new Date().toISOString() });
+  if (!escribirGuardadas(lista.slice(0, MAX_GUARDADAS))) {
+    toast("No se pudo guardar: el navegador no permite almacenamiento local.");
+    return;
+  }
+  pintarGuardadas();
+  toast("Búsqueda guardada ✓ (la encuentras en Preferencias)");
+}
+
+function eliminarGuardada(id) {
+  escribirGuardadas(leerGuardadas().filter(b => b.id !== id));
+  pintarGuardadas();
+  toast("Búsqueda eliminada");
+}
+
+function aplicarBusqueda(b) {
+  VARIABLES.forEach(v => { pesos[v.id] = b.pesos[v.id]; });
+  document.getElementById("presupuesto").value = b.presupuesto;
+  const radio = document.querySelector(`input[name="industrial"][value="${b.industrial}"]`);
+  (radio || document.querySelector('input[name="industrial"][value=""]')).checked = true;
+  pintarSliders();
+}
+
+function repetirGuardada(id) {
+  const b = leerGuardadas().find(x => x.id === id);
+  if (!b) return;
+  aplicarBusqueda(b);
+  recomendar();
+}
+
+function pintarGuardadas() {
+  const lista = leerGuardadas();
+  document.getElementById("tarjeta-guardadas").style.display = lista.length ? "" : "none";
+  document.getElementById("lista-guardadas").innerHTML = lista.map(b => `
+    <div class="guardada">
+      <div class="info">
+        <b>${new Date(b.fecha).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</b>
+        · Presupuesto ${cop(b.presupuesto)} · Industrial: ${TEXTO_INDUSTRIAL[b.industrial] ?? "Sin preferencia"}<br>
+        ${VARIABLES.map(v => `${v.nombre.split(" ")[0]} ${b.pesos[v.id]}`).join(" · ")}
+        ${b.top && b.top.length ? `<br>Top: ${b.top.map(esc).join(", ")}` : ""}
+      </div>
+      <div class="acciones" style="margin-top:0">
+        <button class="btn peq" onclick="repetirGuardada(${b.id})">Repetir</button>
+        <button class="btn peq sec" onclick="eliminarGuardada(${b.id})">Eliminar</button>
+      </div>
+    </div>`).join("");
+}
+
+function enlaceBusqueda(b) {
+  const params = new URLSearchParams();
+  VARIABLES.forEach(v => params.set(PARAM[v.id], b.pesos[v.id]));
+  params.set("b", b.presupuesto);
+  if (b.industrial) params.set("i", b.industrial);
+  return `${location.origin}${location.pathname}?${params}`;
+}
+
+async function copiarEnlace() {
+  if (!ultimaBusqueda) { toast("Primero haz una búsqueda."); return; }
+  const url = enlaceBusqueda(ultimaBusqueda);
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Enlace copiado ✓");
+  } catch (e) {
+    toast("Copia este enlace: " + url);
+  }
+}
+
+// Si la página se abre con ?t=..&s=..&p=..&u=..&v=..&b=..[&i=si|no], repite esa búsqueda.
+function busquedaDesdeURL() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("b")) return null;
+  const b = { pesos: {}, presupuesto: Math.round(+q.get("b") || 0), industrial: q.get("i") || "" };
+  for (const v of VARIABLES) {
+    const n = +q.get(PARAM[v.id]);
+    if (!Number.isInteger(n) || n < 1 || n > 5) return null;
+    b.pesos[v.id] = n;
+  }
+  if (!(b.industrial in TEXTO_INDUSTRIAL)) b.industrial = "";
+  return b;
 }
 
 pintarSliders();
+pintarGuardadas();
 document.querySelector('[data-nav="preferencias"]').classList.add("activo");
-cargarZonas();
+cargarZonas().then(() => {
+  const b = busquedaDesdeURL();
+  if (b && ZONAS.length) { aplicarBusqueda(b); recomendar(); }
+});
 </script>
 </body>
 </html>

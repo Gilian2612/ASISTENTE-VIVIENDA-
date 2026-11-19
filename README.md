@@ -129,9 +129,14 @@ Then open <http://localhost:8000>. The server (standard library only) serves `FR
 | Route | Description |
 |---|---|
 | `GET /api/zonas` | All UPZ with locality, type, rent and normalized variables |
+| `GET /api/upz` | UPZ boundaries (GeoJSON, lon/lat) for the map |
 | `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k zones with similarity % |
 
-The front no longer has its own data or KNN: everything comes from the API. Rent is shown as an estimate. "Save search", "View available properties" and the map are still **simulated**.
+The front no longer has its own data or KNN: everything comes from the API. Rent is shown as an estimate. Other features:
+
+- **Map:** the zone detail shows the official UPZ boundary (Catastro / IDECA) on an OpenStreetMap base map (Leaflet), served by `GET /api/upz` from `data/upz.geojson`.
+- **Save search:** saves the profile (importances, budget, industrial preference) and its top 3 in the browser (`localStorage`, up to 10) to repeat or delete it later from *Preferences*. **Copy link** creates a shareable URL (`?t=5&s=4&p=3&u=5&v=2&b=1800000&i=no`) that reruns the search when opened.
+- **Available properties:** links that open the rental apartment search on Metrocuadrado and Fincaraíz for the UPZ and its locality (in a new tab; no data is extracted from the portals).
 
 ### KNN engine in Python
 
@@ -341,9 +346,14 @@ Luego abre <http://localhost:8000>. El servidor (solo librería estándar) sirve
 | Ruta | Descripción |
 |---|---|
 | `GET /api/zonas` | Todas las UPZ con localidad, tipo, arriendo y variables normalizadas |
+| `GET /api/upz` | Límites de las UPZ (GeoJSON, lon/lat) para el mapa |
 | `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k de zonas con % de similitud |
 
-El front ya no tiene datos ni KNN propios: todo viene de la API. El arriendo se muestra como estimado. «Guardar búsqueda», «Ver inmuebles disponibles» y el mapa siguen **simulados**.
+El front ya no tiene datos ni KNN propios: todo viene de la API. El arriendo se muestra como estimado. Otras funciones:
+
+- **Mapa:** el detalle de la zona muestra el límite oficial de la UPZ (Catastro / IDECA) sobre un mapa base de OpenStreetMap (Leaflet), servido por `GET /api/upz` desde `data/upz.geojson`.
+- **Guardar búsqueda:** guarda el perfil (importancias, presupuesto, preferencia industrial) y su top 3 en el navegador (`localStorage`, hasta 10) para repetirla o eliminarla después desde *Preferencias*. **Copiar enlace** genera una URL para compartir (`?t=5&s=4&p=3&u=5&v=2&b=1800000&i=no`) que repite la búsqueda al abrirla.
+- **Inmuebles disponibles:** enlaces que abren la búsqueda de apartamentos en arriendo en Metrocuadrado y Fincaraíz para la UPZ y su localidad (en una pestaña nueva; no se extraen datos de los portales).
 
 ### Motor KNN en Python
 

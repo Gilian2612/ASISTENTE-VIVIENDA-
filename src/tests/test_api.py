@@ -210,3 +210,14 @@ class TestUpz:
     def test_front_incluye_el_mapa(self, url_base):
         _, _, cuerpo = get(url_base + "/")
         assert b"leaflet" in cuerpo and b"/api/upz" in cuerpo and b'id="mapa"' in cuerpo
+
+    @pytest.mark.unit
+    def test_front_guardar_busqueda_e_inmuebles(self, url_base):
+        """Las funciones antes simuladas ya están implementadas."""
+        _, _, cuerpo = get(url_base + "/")
+        html = cuerpo.decode("utf-8")
+        assert "guardarBusqueda()" in html and "localStorage" in html and "copiarEnlace()" in html
+        assert "https://www.metrocuadrado.com/apartamentos/arriendo/bogota/" in html
+        assert "https://www.fincaraiz.com.co/arriendo/apartamentos/" in html
+        assert 'rel="noopener noreferrer"' in html
+        assert "función simulada" not in html
