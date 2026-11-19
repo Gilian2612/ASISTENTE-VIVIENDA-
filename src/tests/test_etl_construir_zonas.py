@@ -53,6 +53,12 @@ def delitos(localidad, por_anio):
             "properties": {"CMNOMLOCAL": localidad, "CMH25CONT": por_anio, "CMH26CONT": por_anio}}
 
 
+def ies(x, y, estado="01"):
+    """Feature de la capa SNIES (sede principal de una IES)."""
+    return {"type": "Feature", "properties": {"NOMBRE": "IES", "ESTADO": estado},
+            "geometry": {"type": "Point", "coordinates": [x, y]}}
+
+
 def capas_base(**cambios):
     capas = {
         "upz": [UPZ_A, UPZ_B],
@@ -64,6 +70,9 @@ def capas_base(**cambios):
         # SDSCJ: A con 10 incidentes/año, B con 100; LOC1 con 50 delitos/año.
         "incidentes_upz": [incidentes("UPZ2", 10), incidentes("UPZ10", 100), incidentes("UPR1", 999)],
         "delitos_localidad": [delitos("Loc1", 50), delitos("Sin Localización", 9)],
+        # Universidades: 1 sede SNIES en el centro de A; ningún campus POT.
+        "ies_snies": [ies(500, 500)],
+        "campus_pot": [],
     }
     capas.update(cambios)
     return capas
@@ -363,3 +372,37 @@ class TestSeguridadEnConstruir:
         a, _ = construir(capas_base(localidades=[LOCALIDAD, sin_geom]))
         assert a["localidad"] == "LOC1"
         assert a["delitos_localidad_km2"] != ""
+
+
+class TestUniversidadesEnConstruir:
+    """`universidades` = sedes a <= 2 km del centroide de la UPZ, normalizado."""
+
+    @pytest.mark.unit
+    def test_cuenta_sedes_a_2km(self):
+        # Sede en (500, 500): centroide de A a 0 m, de B (1500, 500) a 1000 m → ambas cuentan.
+        a, b = construir(capas_base())
+        assert a["universidades_2km"] == b["universidades_2km"] == 1
+        assert a["universidad_cercana_m"] == 0
+        assert b["universidad_cercana_m"] == 1000
+        assert a["universidades"] == b["universidades"] == 1.0
+
+    @pytest.mark.unit
+    def test_sede_lejana_no_cuenta(self):
+        a, b = construir(capas_base(ies_snies=[ies(100, 5000)]))  # a ~4,5 km de A
+        assert a["universidades_2km"] == b["universidades_2km"] == 0
+        assert a["universidades"] == 0.0
+
+    @pytest.mark.unit
+    def test_mas_sedes_cerca_mas_puntaje(self):
+        # (3400, 500) está a 2,9 km de A y a 1,9 km de B: solo cuenta para B.
+        a2, b2 = construir(capas_base(ies_snies=[ies(500, 500), ies(3400, 500)]))
+        assert b2["universidades_2km"] > a2["universidades_2km"]
+        assert b2["universidades"] > a2["universidades"]
+
+    @pytest.mark.unit
+    def test_sin_sedes(self, monkeypatch):
+        from ETL import universidades as U
+        monkeypatch.setattr(U, "SEDES_MANUALES", [])
+        a, _ = construir(capas_base(ies_snies=[]))
+        assert a["universidades_2km"] == 0
+        assert a["universidad_cercana_m"] == ""

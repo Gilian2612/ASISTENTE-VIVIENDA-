@@ -8,7 +8,10 @@ Variables disponibles hoy (fuentes oficiales, ver `ETL.fuentes`):
 - seguridad: 70 % incidentes 123 por UPZ + 30 % delitos de alto impacto por
   localidad, por km², promedio 2025-2026 (SDSCJ, ver `ETL.seguridad`).
 
-Pendientes (sin fuente abierta verificada): precio, universidades.
+- universidades: sedes de educación superior a <= 2 km del centroide de la UPZ
+  (SNIES + campus del POT + sedes ubicadas a mano, ver `ETL.universidades`).
+
+Pendiente (sin fuente abierta verificada): precio / arriendo.
 
 Normalización: cada indicador se divide por su percentil 95 (calculado solo
 sobre las UPZ residenciales) y se recorta a [0, 1], así los valores extremos
@@ -25,7 +28,7 @@ import math
 import sys
 from pathlib import Path
 
-from ETL import fuentes, seguridad
+from ETL import fuentes, seguridad, universidades
 from ETL.geometria import area, caja, centroide, en_caja, poligonos, punto_en_poligono
 from ETL.tipos_upz import RESIDENCIAL, tipo_de
 
@@ -36,7 +39,8 @@ COLUMNAS = [
     "estaciones_tm", "paraderos_sitp", "estaciones_tm_km2", "paraderos_sitp_km2",
     "parques", "area_parques_m2", "verde_pct",
     "incidentes_123", "incidentes_123_km2", "delitos_localidad", "delitos_localidad_km2",
-    "transporte", "seguridad", "verdes",
+    "universidades_2km", "universidad_cercana_m",
+    "transporte", "seguridad", "universidades", "verdes",
 ]
 
 # Puntos de muestreo (aprox.) por parque para repartir su área entre UPZ.
@@ -177,9 +181,12 @@ def construir(capas):
             clave = seguridad.clave_localidad(f["properties"]["LOCNOMBRE"])
             area_loc_km2[clave] = area_loc_km2.get(clave, 0.0) + area(f["geometry"]) / 1e6
 
+    sedes = universidades.construir_sedes(capas["ies_snies"], capas["campus_pot"])
+
     filas = []
     for f in upz:
         codigo = f["properties"]["CODIGO_UPZ"]
+        n_univ, d_univ = universidades.cercania(centroide(f["geometry"]), sedes)
         area_m2 = area(f["geometry"])
         area_km2 = area_m2 / 1e6
         n_tm, n_sitp = tm.get(codigo, 0), sitp.get(codigo, 0)
@@ -206,6 +213,8 @@ def construir(capas):
             "parques": n_parques.get(codigo, 0),
             "area_parques_m2": round(verde, 1),
             "verde_pct": round(100 * min(verde / area_m2, 1.0), 2) if area_m2 else 0.0,
+            "universidades_2km": n_univ,
+            "universidad_cercana_m": "" if d_univ is None else round(d_univ),
         })
 
     # La escala se calibra con las UPZ residenciales: los parques
@@ -219,9 +228,11 @@ def construir(capas):
     tm_n = norm("estaciones_tm_km2")
     sitp_n = norm("paraderos_sitp_km2")
     verde_n = norm("verde_pct")
-    for r, a, b, v in zip(filas, tm_n, sitp_n, verde_n):
+    univ_n = norm("universidades_2km")
+    for r, a, b, v, u in zip(filas, tm_n, sitp_n, verde_n, univ_n):
         r["transporte"] = round((a + b) / 2, 4)
         r["verdes"] = round(v, 4)
+        r["universidades"] = round(u, 4)
 
     # Seguridad = 1 - riesgo normalizado; las UPZ sin dato quedan en None
     # y `seguridad.combinar` usa el otro componente.
@@ -258,7 +269,7 @@ def escribir_csv(filas, ruta):
 def main(argv=None):  # pragma: no cover - requiere red; cubierto por tests de integración
     argv = sys.argv[1:] if argv is None else argv
     ruta = Path(argv[0]) if argv else RUTA_SALIDA
-    print("Descargando capas de Catastro Bogotá / IDECA y SDSCJ...")
+    print("Descargando capas de Catastro Bogotá / IDECA, SDSCJ y SDP...")
     capas = fuentes.descargar_todo()
     for nombre, features in capas.items():
         print(f"  {nombre}: {len(features)}")

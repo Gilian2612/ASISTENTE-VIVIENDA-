@@ -58,12 +58,13 @@ def contar(url_capa, where="1=1", **kwargs):
 
 
 def consultar(url_capa, campos=("*",), where="1=1", out_sr=SR_METROS,
-              tam_pagina=1000, geometria=True, **kwargs):
+              tam_pagina=1000, geometria=True, orden="OBJECTID", **kwargs):
     """Descarga todas las entidades de una capa como lista de features GeoJSON.
 
     Pagina con `resultOffset` porque el servidor limita cada respuesta
     (maxRecordCount = 2000). Las geometrías vienen en `out_sr`; con
-    `geometria=False` solo se descargan los atributos.
+    `geometria=False` solo se descargan los atributos. `orden` es el campo
+    identificador de la capa (no todas lo llaman OBJECTID).
     """
     features = []
     offset = 0
@@ -73,7 +74,7 @@ def consultar(url_capa, campos=("*",), where="1=1", out_sr=SR_METROS,
             "outFields": ",".join(campos),
             "outSR": out_sr,
             "returnGeometry": "true" if geometria else "false",
-            "orderByFields": "OBJECTID",
+            "orderByFields": orden,
             "resultOffset": offset,
             "resultRecordCount": tam_pagina,
             "f": "geojson",

@@ -101,6 +101,12 @@ class TestConsultar:
         assert p["resultOffset"] == "0"
 
     @pytest.mark.unit
+    def test_campo_de_orden_configurable(self, servidor):
+        s = servidor({"features": features(1)})
+        arcgis.consultar(URL_CAPA, orden="OBJECTID_1", tam_pagina=10)
+        assert s.params(0)["orderByFields"] == "OBJECTID_1"
+
+    @pytest.mark.unit
     def test_sin_geometria(self, servidor):
         s = servidor({"features": features(1)})
         arcgis.consultar(URL_CAPA, geometria=False, tam_pagina=10)
@@ -136,7 +142,7 @@ class TestFuentes:
     @pytest.mark.unit
     def test_capas_en_servidor_oficial(self):
         for nombre, url in fuentes.CAPAS.items():
-            assert url.startswith((arcgis.BASE, fuentes.BASE_SDSCJ)), nombre
+            assert url.startswith((arcgis.BASE, fuentes.BASE_SDSCJ, fuentes.BASE_SDP)), nombre
             assert set(fuentes.CAMPOS[nombre]), nombre
 
     @pytest.mark.unit

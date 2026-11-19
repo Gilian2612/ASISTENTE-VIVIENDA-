@@ -8,9 +8,10 @@ zonas más cercanas a su perfil ideal.
 
 Datos HÍBRIDOS:
 - REALES (data/zonas.csv, generado por `ETL.construir_zonas`):
-  UPZ, localidad, tipo, transporte, seguridad (SDSCJ) y zonas verdes.
-- PROVISIONALES (hardcodeados abajo, por localidad, hasta tener fuente):
-  universidades y arriendo promedio (del que sale `precio`).
+  UPZ, localidad, tipo, transporte, seguridad (SDSCJ), universidades
+  (SNIES + POT) y zonas verdes.
+- PROVISIONAL (hardcodeado abajo, por localidad, hasta tener fuente):
+  arriendo promedio (del que sale `precio`).
 """
 import csv
 import math
@@ -19,34 +20,34 @@ from pathlib import Path
 VARIABLES = ["transporte", "seguridad", "precio", "universidades", "verdes"]
 
 # Variables que aún usan datos provisionales (ver PROVISIONAL_POR_LOCALIDAD).
-VARIABLES_PROVISIONALES = ["precio", "universidades"]
+VARIABLES_PROVISIONALES = ["precio"]
 
 RUTA_ZONAS = Path(__file__).resolve().parents[2] / "data" / "zonas.csv"
 
 # PROVISIONAL — valores de ejemplo por localidad, NO son datos oficiales.
-# Reemplazar cuando haya fuente (SNIES, OTC/Catastro).
-# localidad: (universidades 0-1, arriendo promedio COP)
+# Reemplazar cuando haya fuente (OTC/Catastro).
+# localidad: arriendo promedio COP
 PROVISIONAL_POR_LOCALIDAD = {
-    "USAQUEN":            (0.45, 2_600_000),
-    "CHAPINERO":          (0.95, 2_900_000),
-    "SANTA FE":           (0.85, 1_500_000),
-    "SAN CRISTOBAL":      (0.10,   900_000),
-    "USME":               (0.05,   750_000),
-    "TUNJUELITO":         (0.20, 1_000_000),
-    "BOSA":               (0.10,   850_000),
-    "KENNEDY":            (0.25, 1_100_000),
-    "FONTIBON":           (0.30, 1_700_000),
-    "ENGATIVA":           (0.35, 1_300_000),
-    "SUBA":               (0.40, 1_600_000),
-    "BARRIOS UNIDOS":     (0.55, 1_800_000),
-    "TEUSAQUILLO":        (0.90, 2_000_000),
-    "LOS MARTIRES":       (0.45, 1_200_000),
-    "ANTONIO NARIÑO":     (0.40, 1_200_000),
-    "PUENTE ARANDA":      (0.30, 1_300_000),
-    "CANDELARIA":         (0.90, 1_500_000),
-    "RAFAEL URIBE URIBE": (0.15,   950_000),
-    "CIUDAD BOLIVAR":     (0.05,   750_000),
-    "SUMAPAZ":            (0.00,   600_000),
+    "USAQUEN":            2_600_000,
+    "CHAPINERO":          2_900_000,
+    "SANTA FE":           1_500_000,
+    "SAN CRISTOBAL":      900_000,
+    "USME":               750_000,
+    "TUNJUELITO":         1_000_000,
+    "BOSA":               850_000,
+    "KENNEDY":            1_100_000,
+    "FONTIBON":           1_700_000,
+    "ENGATIVA":           1_300_000,
+    "SUBA":               1_600_000,
+    "BARRIOS UNIDOS":     1_800_000,
+    "TEUSAQUILLO":        2_000_000,
+    "LOS MARTIRES":       1_200_000,
+    "ANTONIO NARIÑO":     1_200_000,
+    "PUENTE ARANDA":      1_300_000,
+    "CANDELARIA":         1_500_000,
+    "RAFAEL URIBE URIBE": 950_000,
+    "CIUDAD BOLIVAR":     750_000,
+    "SUMAPAZ":            600_000,
 }
 
 
@@ -63,7 +64,7 @@ def formato_nombre(texto):
 
 
 def cargar_zonas(ruta=RUTA_ZONAS, provisional=None):
-    """Lee el CSV del ETL y completa con los datos provisionales (universidades, arriendo).
+    """Lee el CSV del ETL y completa con el arriendo provisional.
 
     Devuelve (zonas, metadatos):
     - zonas: {nombre: ([5 variables normalizadas], arriendo COP)}
@@ -86,18 +87,18 @@ def cargar_zonas(ruta=RUTA_ZONAS, provisional=None):
             if fila["localidad"] in provisional:
                 filas.append(fila)
 
-    arriendos = [provisional[f["localidad"]][1] for f in filas]
+    arriendos = [provisional[f["localidad"]] for f in filas]
     minimo, maximo = (min(arriendos), max(arriendos)) if arriendos else (0, 0)
     rango = (maximo - minimo) or 1
 
     zonas, metadatos = {}, {}
     for f in filas:
-        universidades, arriendo = provisional[f["localidad"]]
+        arriendo = provisional[f["localidad"]]
         precio = 1 - (arriendo - minimo) / rango
         nombre = formato_nombre(f["nombre"])
         zonas[nombre] = (
             [float(f["transporte"]), float(f["seguridad"]), round(precio, 4),
-             universidades, float(f["verdes"])],
+             float(f["universidades"]), float(f["verdes"])],
             arriendo,
         )
         metadatos[nombre] = {
