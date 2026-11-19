@@ -131,3 +131,86 @@ class TestPuntoEnPoligono:
         ]]}
         assert not punto_en_poligono(1.5, 2, u)
         assert punto_en_poligono(0.5, 2, u)
+
+
+class TestProyeccionInversa:
+    """EPSG:9377 -> lon/lat (inversa de wgs84_a_ctm12)."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("lon,lat", [(-74.0898, 4.6394), (-74.20, 4.50), (-73.0, 4.0), (-74.03, 4.83)])
+    def test_ida_y_vuelta(self, lon, lat):
+        from ETL.geometria import ctm12_a_wgs84, wgs84_a_ctm12
+        assert ctm12_a_wgs84(*wgs84_a_ctm12(lon, lat)) == pytest.approx((lon, lat), abs=1e-8)
+
+    @pytest.mark.unit
+    def test_punto_del_servidor(self):
+        # U. Nacional: el servidor de Catastro da (4879166.618, 2070743.917) para (-74.08981575, 4.63942077).
+        from ETL.geometria import ctm12_a_wgs84
+        assert ctm12_a_wgs84(4879166.618034107, 2070743.9172044687) == pytest.approx(
+            (-74.08981575, 4.63942077), abs=1e-7)
+
+
+class TestAWgs84:
+    @pytest.mark.unit
+    def test_point_polygon_multipolygon(self):
+        from ETL.geometria import a_wgs84
+        assert a_wgs84({"type": "Point", "coordinates": [5_000_000, 2_000_000]}) == {
+            "type": "Point", "coordinates": [-73.0, 4.0]}
+        pol = a_wgs84(cuadrado(5_000_000, 2_000_000, 1000), decimales=3)
+        assert pol["type"] == "Polygon" and pol["coordinates"][0][0] == [-73.0, 4.0]
+        multi = a_wgs84({"type": "MultiPolygon", "coordinates": [cuadrado(5_000_000, 2_000_000, 10)["coordinates"]]})
+        assert len(multi["coordinates"][0][0]) == 5
+
+    @pytest.mark.unit
+    def test_no_modifica_la_original(self):
+        from ETL.geometria import a_wgs84
+        g = cuadrado(5_000_000, 2_000_000, 10)
+        a_wgs84(g)
+        assert g["coordinates"][0][0] == [5_000_000, 2_000_000]
+
+    @pytest.mark.unit
+    def test_tipo_no_soportado(self):
+        from ETL.geometria import a_wgs84
+        with pytest.raises(ValueError):
+            a_wgs84({"type": "LineString", "coordinates": []})
+
+
+class TestSimplificar:
+    @pytest.mark.unit
+    def test_quita_vertices_casi_alineados(self):
+        from ETL.geometria import simplificar_linea
+        linea = [[0, 0], [1, 0.1], [2, -0.1], [3, 0], [3, 3]]
+        assert simplificar_linea(linea, 0.5) == [[0, 0], [3, 0], [3, 3]]
+
+    @pytest.mark.unit
+    def test_conserva_vertices_significativos(self):
+        from ETL.geometria import simplificar_linea
+        linea = [[0, 0], [5, 10], [10, 0]]
+        assert simplificar_linea(linea, 1) == linea
+
+    @pytest.mark.unit
+    def test_lineas_cortas_y_segmento_degenerado(self):
+        from ETL.geometria import simplificar_linea
+        assert simplificar_linea([[0, 0], [1, 1]], 1) == [[0, 0], [1, 1]]
+        assert simplificar_linea([[0, 0], [5, 5], [0, 0]], 1) == [[0, 0], [5, 5], [0, 0]]
+
+    @pytest.mark.unit
+    def test_poligono_con_ruido_conserva_las_esquinas(self):
+        from ETL.geometria import area, simplificar
+        ruidoso = {"type": "Polygon", "coordinates": [[
+            [0, 0], [50, 0.2], [100, 0], [100, 100], [50, 99.8], [0, 100], [0, 0]]]}
+        s = simplificar(ruidoso, 1)
+        assert len(s["coordinates"][0]) == 5
+        assert area(s) == pytest.approx(10_000, rel=0.01)
+
+    @pytest.mark.unit
+    def test_no_colapsa_anillos_pequenos(self):
+        from ETL.geometria import simplificar
+        assert simplificar(cuadrado(0, 0, 1), 100) == cuadrado(0, 0, 1)
+
+    @pytest.mark.unit
+    def test_multipolygon_y_tipo_invalido(self):
+        from ETL.geometria import simplificar
+        assert simplificar(MULTI, 0.1)["type"] == "MultiPolygon"
+        with pytest.raises(ValueError):
+            simplificar({"type": "Point", "coordinates": [0, 0]}, 1)
