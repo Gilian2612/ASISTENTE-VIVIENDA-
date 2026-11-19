@@ -137,15 +137,36 @@ recomendar([5, 4, 3, 5, 2], presupuesto=1_800_000, k=3)
 # -> [(zone, similarity %), ...]
 ```
 
+### Zone dataset (ETL)
+
+Builds `data/zonas.csv` (one row per UPZ, 112 in total) from the public ArcGIS REST services of [Catastro Bogotá / IDECA](https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services). No API key is needed, and it uses only the standard library:
+
+```bash
+cd src && python3 -m ETL.construir_zonas
+```
+
+| Variable | Source layer | Indicator |
+|---|---|---|
+| UPZ | `ordenamientoterritorial/unidadplaneamientozonal` | Official polygons, code, name, area |
+| Locality | `Mapa_Referencia/Mapa_Referencia` (layer 48) | Locality containing the UPZ |
+| Transport | `movilidad/transportepublico` (TM stations, portals, SITP stops) | Stations/stops per km² |
+| Green areas | `recreaciondeporte/parquesyescenarios` (IDRD) | % of UPZ area covered by parks |
+| Type | Hardcoded table `src/ETL/tipos_upz.py` (POT categories) | `industrial` / `dotacional` / `residencial` |
+
+Each indicator is divided by its 95th percentile, computed over residential UPZ only, and clipped to `[0, 1]`. A park that crosses UPZ boundaries counts in every UPZ it touches, and its area is split by the share inside each one. Industrial and institutional ("dotacional") UPZ are **marked, not excluded**.
+
+**Hybrid KNN:** `KNN/knn.py` loads `data/zonas.csv` (real transport, green areas, locality and type) and fills safety, universities and rent with **provisional per-locality values** (`PROVISIONAL_POR_LOCALIDAD`) until a verified source exists. `recomendar(..., industrial=True|False|None)` answers "are you looking for an industrial zone? yes / no / no preference".
+
 ### Tests and coverage
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest
+pytest                              # unit tests (offline)
+pytest -m integration --no-cov      # integration: queries the real services
 ```
 
-`pytest` produces coverage reports (terminal, `htmlcov/` and `coverage.xml`) and fails if coverage drops below 90%.
+`pytest` produces coverage reports (terminal, `htmlcov/` and `coverage.xml`) and fails if coverage drops below 90%. Integration tests are excluded by default because they need network access.
 
 ## Scope
 
@@ -296,15 +317,36 @@ recomendar([5, 4, 3, 5, 2], presupuesto=1_800_000, k=3)
 # -> [(zona, similitud %), ...]
 ```
 
+### Dataset de zonas (ETL)
+
+Construye `data/zonas.csv` (una fila por UPZ, 112 en total) a partir de los servicios ArcGIS REST públicos de [Catastro Bogotá / IDECA](https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services). No requiere clave y usa solo la librería estándar:
+
+```bash
+cd src && python3 -m ETL.construir_zonas
+```
+
+| Variable | Capa fuente | Indicador |
+|---|---|---|
+| UPZ | `ordenamientoterritorial/unidadplaneamientozonal` | Polígonos oficiales, código, nombre, área |
+| Localidad | `Mapa_Referencia/Mapa_Referencia` (capa 48) | Localidad que contiene la UPZ |
+| Transporte | `movilidad/transportepublico` (estaciones y portales TM, paraderos SITP) | Estaciones/paraderos por km² |
+| Zonas verdes | `recreaciondeporte/parquesyescenarios` (IDRD) | % del área de la UPZ en parques |
+| Tipo | Tabla hardcodeada `src/ETL/tipos_upz.py` (categorías del POT) | `industrial` / `dotacional` / `residencial` |
+
+Cada indicador se divide por su percentil 95, calculado solo sobre las UPZ residenciales, y se recorta a `[0, 1]`. Un parque que cruza límites cuenta en todas las UPZ que toca, y su área se reparte según la porción que cae en cada una. Las UPZ industriales y dotacionales **se marcan, no se excluyen**.
+
+**KNN híbrido:** `KNN/knn.py` carga `data/zonas.csv` (transporte, verdes, localidad y tipo reales) y completa seguridad, universidades y arriendo con **valores provisionales por localidad** (`PROVISIONAL_POR_LOCALIDAD`) hasta tener una fuente verificada. `recomendar(..., industrial=True|False|None)` responde "¿buscas zona industrial? sí / no / sin preferencia".
+
 ### Pruebas y cobertura
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest
+pytest                              # pruebas unitarias (sin red)
+pytest -m integration --no-cov      # integración: consulta los servicios reales
 ```
 
-`pytest` genera reportes de cobertura (terminal, `htmlcov/` y `coverage.xml`) y falla si la cobertura baja del 90 %.
+`pytest` genera reportes de cobertura (terminal, `htmlcov/` y `coverage.xml`) y falla si la cobertura baja del 90 %. Las pruebas de integración se excluyen por defecto porque requieren red.
 
 ## Alcance
 

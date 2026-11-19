@@ -3,12 +3,13 @@ testpaths = ["src/tests"]
 pythonpath = ["src"]
 markers = [
     "unit: prueba unitaria (rápida, sin I/O ni dependencias externas)",
+    "integration: consulta servicios externos reales (requiere red). Correr con: pytest -m integration --no-cov",
 ]
-addopts = "--strict-markers --cov=KNN --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"
+addopts = "--strict-markers -m 'not integration' --cov=KNN --cov=ETL --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"
 
 [tool.coverage.run]
 branch = true
-source = ["KNN"]
+source = ["KNN", "ETL"]
 omit = ["*/tests/*"]
 
 [tool.coverage.report]

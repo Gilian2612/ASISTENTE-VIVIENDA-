@@ -1,11 +1,16 @@
+import csv
 import math
 
 import pytest
 
 from KNN import knn
 from KNN.knn import (
+    METADATOS,
+    PROVISIONAL_POR_LOCALIDAD,
     VARIABLES,
     ZONAS,
+    cargar_zonas,
+    cumple_preferencia_industrial,
     distancia,
     pesos_desde_importancia,
     recomendar,
@@ -14,18 +19,60 @@ from KNN.knn import (
 PERFIL_ESTUDIANTE = [5, 4, 3, 5, 2]
 PRESUPUESTO_ALTO = 10_000_000
 
+# Datos fijos de ejemplo para probar el ALGORITMO sin depender del dataset
+# real (que cambia cada vez que se regenera con el ETL).
+ZONAS_EJEMPLO = {
+    "Chapinero":      ([0.90, 0.60, 0.25, 0.95, 0.60], 2_200_000),
+    "Teusaquillo":    ([0.85, 0.70, 0.45, 0.90, 0.75], 1_800_000),
+    "Usaquén":        ([0.70, 0.80, 0.30, 0.40, 0.85], 2_400_000),
+    "Suba":           ([0.60, 0.55, 0.60, 0.35, 0.70], 1_400_000),
+    "Kennedy":        ([0.75, 0.40, 0.80, 0.30, 0.45], 1_000_000),
+    "Fontibón":       ([0.80, 0.60, 0.65, 0.40, 0.50], 1_300_000),
+    "Engativá":       ([0.70, 0.50, 0.70, 0.45, 0.55], 1_200_000),
+    "Bosa":           ([0.50, 0.30, 0.90, 0.15, 0.35], 800_000),
+    "Barrios Unidos": ([0.80, 0.65, 0.55, 0.60, 0.60], 1_500_000),
+    "Santa Fe":       ([0.85, 0.35, 0.60, 0.85, 0.55], 1_300_000),
+}
+
 
 # ---------------------------------------------------------------- datos
 class TestDatosZonas:
-    """Valida la consistencia de los datos de ejemplo `ZONAS` y `VARIABLES`.
+    """Valida el dataset REAL cargado (`data/zonas.csv` + datos provisionales).
 
-    No prueba lógica, sino que el "dataset" esté bien formado: si alguien lo
-    reemplaza por el dataset real de UPZ y rompe el formato, estos tests avisan.
-    Se va a testear:
+    No prueba lógica, sino que el dataset esté bien formado: si alguien
+    regenera el CSV o cambia los datos provisionales y rompe el formato, estos
+    tests avisan. Se va a testear:
+    - que haya al menos 20 zonas (objetivo del proyecto),
     - que cada zona tenga un valor por variable,
     - que los valores estén normalizados en [0, 1],
-    - que los arriendos sean positivos.
+    - que los arriendos sean positivos,
+    - que cada zona tenga metadatos (localidad y tipo).
     """
+
+    @pytest.mark.unit
+    def test_al_menos_20_zonas(self):
+        """El objetivo cuantitativo del proyecto: >= 20 zonas."""
+        assert len(ZONAS) >= 20
+
+    @pytest.mark.unit
+    def test_cada_zona_tiene_metadatos(self):
+        """Toda zona tiene código UPZ, localidad y un tipo válido."""
+        assert set(METADATOS) == set(ZONAS)
+        for nombre, m in METADATOS.items():
+            assert m["codigo_upz"] and m["localidad"], nombre
+            assert m["tipo"] in {"residencial", "industrial", "dotacional"}, nombre
+
+    @pytest.mark.unit
+    def test_hay_zonas_industriales_marcadas(self):
+        """Las UPZ industriales no se excluyen del dataset: se marcan."""
+        assert any(m["tipo"] == "industrial" for m in METADATOS.values())
+
+    @pytest.mark.unit
+    def test_provisional_cubre_todas_las_localidades_del_csv(self):
+        """Ninguna UPZ se pierde por falta de datos provisionales de su localidad."""
+        with knn.RUTA_ZONAS.open(encoding="utf-8") as fh:
+            localidades = {f["localidad"] for f in csv.DictReader(fh)}
+        assert localidades <= set(PROVISIONAL_POR_LOCALIDAD)
 
     @pytest.mark.unit
     def test_cada_zona_tiene_un_valor_por_variable(self):
@@ -135,7 +182,15 @@ class TestRecomendar:
       escalar importancias no cambia nada),
     - los extremos de similitud (100 % y 0 %) usando datos falsos con `monkeypatch`,
     - errores y determinismo.
+
+    Usa `ZONAS_EJEMPLO` (fixture autouse) para que los resultados esperados
+    no cambien al regenerar el dataset real.
     """
+
+    @pytest.fixture(autouse=True)
+    def datos_de_ejemplo(self, monkeypatch):
+        monkeypatch.setattr(knn, "ZONAS", ZONAS_EJEMPLO)
+        monkeypatch.setattr(knn, "METADATOS", {})
 
     @pytest.mark.unit
     def test_devuelve_k_resultados_por_defecto_3(self):
@@ -151,7 +206,7 @@ class TestRecomendar:
     @pytest.mark.unit
     def test_k_mayor_que_zonas_devuelve_todas(self):
         """Con k = 100 y solo 10 zonas, devuelve las 10 sin error."""
-        assert len(recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=100)) == len(ZONAS)
+        assert len(recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=100)) == len(ZONAS_EJEMPLO)
 
     @pytest.mark.unit
     def test_k_cero_devuelve_vacio(self):
@@ -162,7 +217,7 @@ class TestRecomendar:
     def test_formato_nombre_y_similitud(self):
         """Cada resultado es (nombre de zona existente, similitud float entre 0 y 100)."""
         for nombre, sim in recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=10):
-            assert nombre in ZONAS
+            assert nombre in ZONAS_EJEMPLO
             assert isinstance(sim, float)
             assert 0.0 <= sim <= 100.0
 
@@ -183,7 +238,7 @@ class TestRecomendar:
     def test_filtro_de_presupuesto(self, presupuesto):
         """Con 4 presupuestos distintos, ninguna zona recomendada cuesta más que el presupuesto."""
         for nombre, _ in recomendar(PERFIL_ESTUDIANTE, presupuesto, k=10):
-            assert ZONAS[nombre][1] <= presupuesto
+            assert ZONAS_EJEMPLO[nombre][1] <= presupuesto
 
     @pytest.mark.unit
     def test_presupuesto_igual_al_arriendo_incluye_la_zona(self):
@@ -259,3 +314,148 @@ class TestRecomendar:
         a = recomendar(PERFIL_ESTUDIANTE, 1_800_000)
         b = recomendar(PERFIL_ESTUDIANTE, 1_800_000)
         assert a == b
+
+
+# ------------------------------------------------------------ cargar_zonas
+def escribir_csv_zonas(ruta, filas):
+    columnas = ["codigo_upz", "nombre", "localidad", "tipo", "transporte", "verdes"]
+    with ruta.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=columnas)
+        w.writeheader()
+        w.writerows(filas)
+
+
+def fila(codigo, nombre, localidad, tipo="residencial", transporte=0.5, verdes=0.5):
+    return {"codigo_upz": codigo, "nombre": nombre, "localidad": localidad,
+            "tipo": tipo, "transporte": transporte, "verdes": verdes}
+
+
+PROVISIONAL_PRUEBA = {
+    "CARA":   (0.8, 0.9, 3_000_000),
+    "BARATA": (0.2, 0.1, 1_000_000),
+}
+
+
+class TestCargarZonas:
+    """Prueba `cargar_zonas`: combina el CSV real con los datos provisionales."""
+
+    @pytest.mark.unit
+    def test_combina_csv_y_provisional(self, tmp_path):
+        """transporte/verdes vienen del CSV; seguridad/universidades/arriendo, del provisional."""
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [fila("1", "ZONA UNO", "CARA", transporte=0.7, verdes=0.3)])
+        zonas, meta = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        vector, arriendo = zonas["Zona Uno"]
+        assert vector[0] == 0.7 and vector[4] == 0.3
+        assert vector[1] == 0.8 and vector[3] == 0.9
+        assert arriendo == 3_000_000
+        assert meta["Zona Uno"] == {"codigo_upz": "1", "localidad": "CARA", "tipo": "residencial"}
+
+    @pytest.mark.unit
+    def test_precio_invierte_el_arriendo(self, tmp_path):
+        """La zona más barata tiene precio 1 y la más cara precio 0."""
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", "BARATA")])
+        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        assert zonas["A"][0][2] == 0.0
+        assert zonas["B"][0][2] == 1.0
+
+    @pytest.mark.unit
+    def test_un_solo_arriendo_no_divide_por_cero(self, tmp_path):
+        """Si todas las zonas tienen el mismo arriendo, precio = 1 para todas."""
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", "CARA")])
+        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        assert {v[0][2] for v in zonas.values()} == {1.0}
+
+    @pytest.mark.unit
+    def test_omite_localidad_sin_datos_provisionales(self, tmp_path):
+        """Una UPZ sin localidad o con localidad desconocida no se carga."""
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", ""), fila("3", "C", "OTRA")])
+        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        assert list(zonas) == ["A"]
+
+    @pytest.mark.unit
+    def test_csv_vacio_da_dataset_vacio(self, tmp_path):
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [])
+        assert cargar_zonas(ruta, PROVISIONAL_PRUEBA) == ({}, {})
+
+    @pytest.mark.unit
+    def test_sin_csv_explica_como_generarlo(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="ETL.construir_zonas"):
+            cargar_zonas(tmp_path / "no_existe.csv")
+
+    @pytest.mark.unit
+    def test_usa_datos_provisionales_por_defecto(self, tmp_path):
+        ruta = tmp_path / "zonas.csv"
+        escribir_csv_zonas(ruta, [fila("99", "CHAPINERO", "CHAPINERO")])
+        zonas, _ = cargar_zonas(ruta)
+        assert zonas["Chapinero"][1] == PROVISIONAL_POR_LOCALIDAD["CHAPINERO"][2]
+
+
+# ------------------------------------------------- preferencia industrial
+class TestPreferenciaIndustrial:
+    """La persona responde: ¿buscas zona industrial? sí (True) / no (False) / sin preferencia (None)."""
+
+    ZONAS_TIPOS = {
+        "Fabrica": ([0.9] * 5, 1_000_000),
+        "Barrio": ([0.5] * 5, 1_000_000),
+        "Parque": ([0.4] * 5, 1_000_000),
+    }
+    META_TIPOS = {
+        "Fabrica": {"tipo": "industrial"},
+        "Barrio": {"tipo": "residencial"},
+        "Parque": {"tipo": "dotacional"},
+    }
+
+    @pytest.fixture(autouse=True)
+    def datos(self, monkeypatch):
+        monkeypatch.setattr(knn, "ZONAS", self.ZONAS_TIPOS)
+        monkeypatch.setattr(knn, "METADATOS", self.META_TIPOS)
+
+    def _nombres(self, industrial):
+        return [n for n, _ in recomendar([3] * 5, PRESUPUESTO_ALTO, k=10, industrial=industrial)]
+
+    @pytest.mark.unit
+    def test_sin_preferencia_incluye_todas(self):
+        assert self._nombres(None) == ["Fabrica", "Barrio", "Parque"]
+
+    @pytest.mark.unit
+    def test_si_solo_industriales(self):
+        assert self._nombres(True) == ["Fabrica"]
+
+    @pytest.mark.unit
+    def test_no_excluye_industriales_pero_no_dotacionales(self):
+        assert self._nombres(False) == ["Barrio", "Parque"]
+
+    @pytest.mark.unit
+    def test_por_defecto_es_sin_preferencia(self):
+        assert [n for n, _ in recomendar([3] * 5, PRESUPUESTO_ALTO, k=10)] == self._nombres(None)
+
+    @pytest.mark.unit
+    def test_zona_sin_metadatos_cuenta_como_no_industrial(self):
+        assert cumple_preferencia_industrial("Desconocida", False)
+        assert not cumple_preferencia_industrial("Desconocida", True)
+
+
+# ------------------------------------------------- dataset real (híbrido)
+class TestRecomendarConDatosReales:
+    """Pruebas de cordura de `recomendar` sobre el dataset real cargado."""
+
+    @pytest.mark.unit
+    def test_devuelve_upz_reales(self):
+        for nombre, sim in recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=5):
+            assert nombre in ZONAS and 0 <= sim <= 100
+
+    @pytest.mark.unit
+    def test_evitar_industriales_no_devuelve_ninguna(self):
+        for nombre, _ in recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=len(ZONAS), industrial=False):
+            assert METADATOS[nombre]["tipo"] != "industrial"
+
+    @pytest.mark.unit
+    def test_solo_industriales_devuelve_solo_industriales(self):
+        resultado = recomendar(PERFIL_ESTUDIANTE, PRESUPUESTO_ALTO, k=len(ZONAS), industrial=True)
+        assert resultado
+        assert all(METADATOS[n]["tipo"] == "industrial" for n, _ in resultado)
