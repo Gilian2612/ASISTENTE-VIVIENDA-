@@ -6,7 +6,7 @@ import pytest
 from KNN import knn
 from KNN.knn import (
     METADATOS,
-    PROVISIONAL_POR_LOCALIDAD,
+    VARIABLES_PROVISIONALES,
     VARIABLES,
     ZONAS,
     cargar_zonas,
@@ -68,11 +68,14 @@ class TestDatosZonas:
         assert any(m["tipo"] == "industrial" for m in METADATOS.values())
 
     @pytest.mark.unit
-    def test_provisional_cubre_todas_las_localidades_del_csv(self):
-        """Ninguna UPZ se pierde por falta de datos provisionales de su localidad."""
+    def test_todas_las_upz_del_csv_se_cargan(self):
+        """Ninguna UPZ se pierde: todas tienen arriendo estimado (por UPZ o por localidad)."""
         with knn.RUTA_ZONAS.open(encoding="utf-8") as fh:
-            localidades = {f["localidad"] for f in csv.DictReader(fh)}
-        assert localidades <= set(PROVISIONAL_POR_LOCALIDAD)
+            assert len(list(csv.DictReader(fh))) == len(ZONAS)
+
+    @pytest.mark.unit
+    def test_ya_no_hay_variables_provisionales(self):
+        assert VARIABLES_PROVISIONALES == []
 
     @pytest.mark.unit
     def test_cada_zona_tiene_un_valor_por_variable(self):
@@ -318,84 +321,52 @@ class TestRecomendar:
 
 # ------------------------------------------------------------ cargar_zonas
 def escribir_csv_zonas(ruta, filas):
-    columnas = ["codigo_upz", "nombre", "localidad", "tipo", "transporte", "seguridad", "universidades", "verdes"]
+    columnas = ["codigo_upz", "nombre", "localidad", "tipo", "arriendo_estimado", *VARIABLES]
     with ruta.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=columnas)
         w.writeheader()
         w.writerows(filas)
 
 
-def fila(codigo, nombre, localidad, tipo="residencial", transporte=0.5, seguridad=0.5,
-         universidades=0.5, verdes=0.5):
+def fila(codigo, nombre, localidad="LOC", tipo="residencial", arriendo="1000000.0", **variables):
+    valores = {v: 0.5 for v in VARIABLES}
+    valores.update(variables)
     return {"codigo_upz": codigo, "nombre": nombre, "localidad": localidad, "tipo": tipo,
-            "transporte": transporte, "seguridad": seguridad, "universidades": universidades,
-            "verdes": verdes}
-
-
-PROVISIONAL_PRUEBA = {
-    "CARA":   3_000_000,
-    "BARATA": 1_000_000,
-}
+            "arriendo_estimado": arriendo, **valores}
 
 
 class TestCargarZonas:
-    """Prueba `cargar_zonas`: combina el CSV real con los datos provisionales."""
+    """Prueba `cargar_zonas`: lee las 5 variables y el arriendo estimado del CSV del ETL."""
 
     @pytest.mark.unit
-    def test_combina_csv_y_provisional(self, tmp_path):
-        """transporte/seguridad/universidades/verdes vienen del CSV; el arriendo, del provisional."""
+    def test_lee_variables_y_arriendo(self, tmp_path):
         ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("1", "ZONA UNO", "CARA", transporte=0.7, seguridad=0.8,
-                                       universidades=0.9, verdes=0.3)])
-        zonas, meta = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        escribir_csv_zonas(ruta, [fila("1", "ZONA UNO", "CARA", arriendo="1234567.0", transporte=0.7,
+                                       seguridad=0.8, precio=0.1, universidades=0.9, verdes=0.3)])
+        zonas, meta = cargar_zonas(ruta)
         vector, arriendo = zonas["Zona Uno"]
-        assert vector[0] == 0.7 and vector[4] == 0.3
-        assert vector[1] == 0.8 and vector[3] == 0.9
-        assert arriendo == 3_000_000
+        assert vector == [0.7, 0.8, 0.1, 0.9, 0.3]
+        assert arriendo == 1_234_567
         assert meta["Zona Uno"] == {"codigo_upz": "1", "localidad": "CARA", "tipo": "residencial"}
 
     @pytest.mark.unit
-    def test_precio_invierte_el_arriendo(self, tmp_path):
-        """La zona más barata tiene precio 1 y la más cara precio 0."""
+    def test_omite_upz_sin_arriendo(self, tmp_path):
+        """Sin arriendo estimado no se puede aplicar el filtro de presupuesto."""
         ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", "BARATA")])
-        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
-        assert zonas["A"][0][2] == 0.0
-        assert zonas["B"][0][2] == 1.0
-
-    @pytest.mark.unit
-    def test_un_solo_arriendo_no_divide_por_cero(self, tmp_path):
-        """Si todas las zonas tienen el mismo arriendo, precio = 1 para todas."""
-        ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", "CARA")])
-        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
-        assert {v[0][2] for v in zonas.values()} == {1.0}
-
-    @pytest.mark.unit
-    def test_omite_localidad_sin_datos_provisionales(self, tmp_path):
-        """Una UPZ sin localidad o con localidad desconocida no se carga."""
-        ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("1", "A", "CARA"), fila("2", "B", ""), fila("3", "C", "OTRA")])
-        zonas, _ = cargar_zonas(ruta, PROVISIONAL_PRUEBA)
+        escribir_csv_zonas(ruta, [fila("1", "A"), fila("2", "B", arriendo="")])
+        zonas, _ = cargar_zonas(ruta)
         assert list(zonas) == ["A"]
 
     @pytest.mark.unit
     def test_csv_vacio_da_dataset_vacio(self, tmp_path):
         ruta = tmp_path / "zonas.csv"
         escribir_csv_zonas(ruta, [])
-        assert cargar_zonas(ruta, PROVISIONAL_PRUEBA) == ({}, {})
+        assert cargar_zonas(ruta) == ({}, {})
 
     @pytest.mark.unit
     def test_sin_csv_explica_como_generarlo(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="ETL.construir_zonas"):
             cargar_zonas(tmp_path / "no_existe.csv")
-
-    @pytest.mark.unit
-    def test_usa_datos_provisionales_por_defecto(self, tmp_path):
-        ruta = tmp_path / "zonas.csv"
-        escribir_csv_zonas(ruta, [fila("99", "CHAPINERO", "CHAPINERO")])
-        zonas, _ = cargar_zonas(ruta)
-        assert zonas["Chapinero"][1] == PROVISIONAL_POR_LOCALIDAD["CHAPINERO"]
 
 
 # ------------------------------------------------- preferencia industrial

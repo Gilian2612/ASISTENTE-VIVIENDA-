@@ -11,7 +11,13 @@ Variables disponibles hoy (fuentes oficiales, ver `ETL.fuentes`):
 - universidades: sedes de educación superior a <= 2 km del centroide de la UPZ
   (SNIES + campus del POT + sedes ubicadas a mano, ver `ETL.universidades`).
 
-Pendiente (sin fuente abierta verificada): precio / arriendo.
+- precio / arriendo_estimado: mediana del avalúo catastral por m² de
+  apartamentos (PH residencial) de las manzanas de la UPZ, convertido a
+  arriendo mensual con la tasa de renta del OTC (`arriendo_avaluo`, ver
+  `ETL.precio` y DOCS/PRECIO.md). precio = 1 - avalúo normalizado.
+- arriendo_estimado: arriendo_avaluo calibrado con anuncios reales de
+  Metrocuadrado / Fincaraíz recogidos a mano (`ETL.calibracion`); sin
+  muestra suficiente, igual a arriendo_avaluo.
 
 Normalización: cada indicador se divide por su percentil 95 (calculado solo
 sobre las UPZ residenciales) y se recorta a [0, 1], así los valores extremos
@@ -28,7 +34,7 @@ import math
 import sys
 from pathlib import Path
 
-from ETL import fuentes, seguridad, universidades
+from ETL import calibracion, fuentes, precio, seguridad, universidades
 from ETL.geometria import area, caja, centroide, en_caja, poligonos, punto_en_poligono
 from ETL.tipos_upz import RESIDENCIAL, tipo_de
 
@@ -40,7 +46,8 @@ COLUMNAS = [
     "parques", "area_parques_m2", "verde_pct",
     "incidentes_123", "incidentes_123_km2", "delitos_localidad", "delitos_localidad_km2",
     "universidades_2km", "universidad_cercana_m",
-    "transporte", "seguridad", "universidades", "verdes",
+    "avaluo_ph_m2", "manzanas_ph", "avaluo_fuente", "arriendo_avaluo", "arriendo_estimado",
+    "transporte", "seguridad", "precio", "universidades", "verdes",
 ]
 
 # Puntos de muestreo (aprox.) por parque para repartir su área entre UPZ.
@@ -183,6 +190,15 @@ def construir(capas):
 
     sedes = universidades.construir_sedes(capas["ies_snies"], capas["campus_pot"])
 
+    localidad_de_upz = {
+        f["properties"]["CODIGO_UPZ"]: indice_loc.buscar_poligono(f["geometry"]) or ""
+        for f in upz
+    }
+    avaluos = precio.avaluo_por_upz(
+        precio.avaluos_por_zona(capas["avaluo_ph"], lambda g: indice_upz.buscar(*centroide(g))),
+        localidad_de_upz,
+    )
+
     filas = []
     for f in upz:
         codigo = f["properties"]["CODIGO_UPZ"]
@@ -191,7 +207,8 @@ def construir(capas):
         area_km2 = area_m2 / 1e6
         n_tm, n_sitp = tm.get(codigo, 0), sitp.get(codigo, 0)
         verde = parques.get(codigo, 0.0)
-        localidad = indice_loc.buscar_poligono(f["geometry"]) or ""
+        localidad = localidad_de_upz[codigo]
+        avaluo_m2, n_manzanas, fuente_avaluo = avaluos[codigo]
         clave_loc = seguridad.clave_localidad(localidad)
         n_inc = incidentes.get(str(codigo))
         n_del = delitos.get(clave_loc)
@@ -215,6 +232,10 @@ def construir(capas):
             "verde_pct": round(100 * min(verde / area_m2, 1.0), 2) if area_m2 else 0.0,
             "universidades_2km": n_univ,
             "universidad_cercana_m": "" if d_univ is None else round(d_univ),
+            "avaluo_ph_m2": "" if avaluo_m2 is None else round(avaluo_m2),
+            "manzanas_ph": n_manzanas,
+            "avaluo_fuente": fuente_avaluo if avaluo_m2 is not None else "",
+            "arriendo_avaluo": "" if avaluo_m2 is None else round(precio.arriendo_estimado(avaluo_m2), -3),
         })
 
     # La escala se calibra con las UPZ residenciales: los parques
@@ -247,6 +268,17 @@ def construir(capas):
                                seguridad_desde("delitos_localidad_km2")):
         r["seguridad"] = round(seguridad.combinar(s_upz, s_loc), 4)
 
+    # Precio = 1 - avalúo normalizado (más barato = mejor); sin dato, neutral.
+    con_avaluo = [r for r in filas if r["avaluo_ph_m2"] != ""]
+    caro = normalizar([r["avaluo_ph_m2"] for r in con_avaluo],
+                      referencia=[r["avaluo_ph_m2"] for r in con_avaluo if r["tipo"] == RESIDENCIAL])
+    precio_por_fila = {id(r): round(1 - c, 4) for r, c in zip(con_avaluo, caro)}
+    for r in filas:
+        r["precio"] = precio_por_fila.get(id(r), 0.5)
+
+    # Sin calibrar todavía: arriendo_estimado = arriendo_avaluo (ver `main`).
+    calibracion.aplicar(filas, {"aplicado": False, "factor": 1.0})
+
     filas.sort(key=_orden_codigo)
     return filas
 
@@ -257,11 +289,11 @@ def _orden_codigo(fila):
     return (0, int(codigo), "") if codigo.isdigit() else (1, 0, codigo)
 
 
-def escribir_csv(filas, ruta):
+def escribir_csv(filas, ruta, columnas=None):
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)
     with ruta.open("w", newline="", encoding="utf-8") as fh:
-        escritor = csv.DictWriter(fh, fieldnames=COLUMNAS)
+        escritor = csv.DictWriter(fh, fieldnames=columnas or COLUMNAS)
         escritor.writeheader()
         escritor.writerows(filas)
 
@@ -269,11 +301,14 @@ def escribir_csv(filas, ruta):
 def main(argv=None):  # pragma: no cover - requiere red; cubierto por tests de integración
     argv = sys.argv[1:] if argv is None else argv
     ruta = Path(argv[0]) if argv else RUTA_SALIDA
-    print("Descargando capas de Catastro Bogotá / IDECA, SDSCJ y SDP...")
+    print("Descargando capas de Catastro Bogotá / IDECA, SDSCJ y SDP (puede tardar unos minutos)...")
     capas = fuentes.descargar_todo()
     for nombre, features in capas.items():
         print(f"  {nombre}: {len(features)}")
     filas = construir(capas)
+    print("Calibración del arriendo con anuncios (data/calibracion_arriendos.csv):")
+    resultado, errores = calibracion.calibrar(filas)
+    print(calibracion.reporte(resultado, errores))
     escribir_csv(filas, ruta)
     print(f"{len(filas)} UPZ escritas en {ruta}")
 

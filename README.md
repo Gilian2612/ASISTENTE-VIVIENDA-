@@ -131,7 +131,7 @@ Then open <http://localhost:8000>. The server (standard library only) serves `FR
 | `GET /api/zonas` | All UPZ with locality, type, rent and normalized variables |
 | `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k zones with similarity % |
 
-The front no longer has its own data or KNN: everything comes from the API. Provisional variables are labeled in the UI. "Save search", "View available properties" and the map are still **simulated**.
+The front no longer has its own data or KNN: everything comes from the API. Rent is shown as an estimate. "Save search", "View available properties" and the map are still **simulated**.
 
 ### KNN engine in Python
 
@@ -166,12 +166,28 @@ cd src && python3 -m ETL.construir_zonas
 | Transport | `movilidad/transportepublico` (TM stations, portals, SITP stops) | Stations/stops per km² |
 | Green areas | `recreaciondeporte/parquesyescenarios` (IDRD) | % of UPZ area covered by parks |
 | Type | Hardcoded table `src/ETL/tipos_upz.py` (POT categories) | `industrial` / `dotacional` / `residencial` |
+| Price / rent | Catastro `catastro/medavalcatphmz` layer 1: median appraisal (*avalúo catastral*) per m² of residential apartments by block, 2026 | Median per UPZ → `precio` (1 = cheapest) and estimated monthly rent ([details](DOCS/PRECIO.md)) |
 | Universities | SNIES (Catastro `educacion/infraestructuraeducativa` layer 1) + POT campus polygons ([SDP](https://serviciosg.sdp.gov.co/server/rest/services/POT555)) + 8 hand-placed campuses (`src/ETL/universidades.py`) | Campuses within 2 km of the UPZ centroid |
 | Safety | [SDSCJ](https://oaiee.scj.gov.co/agc/rest/services/Tematicos_Pub/CifrasSCJ/MapServer) `CifrasSCJ` layers 3 (123 incidents by UPZ) and 0 (high-impact crimes by locality) | 70 % incidents per km² of the UPZ + 30 % crimes per km² of the locality, average Jan–Sep 2025–2026, inverted (1 = safest) |
 
 Each indicator is divided by its 95th percentile, computed over residential UPZ only, and clipped to `[0, 1]`. A park that crosses UPZ boundaries counts in every UPZ it touches, and its area is split by the share inside each one. Industrial and institutional ("dotacional") UPZ are **marked, not excluded**.
 
-**Hybrid KNN:** `KNN/knn.py` loads `data/zonas.csv` (real transport, safety, universities, green areas, locality and type) and fills rent with **provisional per-locality values** (`PROVISIONAL_POR_LOCALIDAD`) until a verified source exists. `recomendar(..., industrial=True|False|None)` answers "are you looking for an industrial zone? yes / no / no preference".
+**KNN:** `KNN/knn.py` loads `data/zonas.csv`: the 5 variables come from official sources and none is provisional anymore. `recomendar(..., industrial=True|False|None)` answers "are you looking for an industrial zone? yes / no / no preference".
+
+#### Price and estimated rent
+
+The budget filter uses an **estimated** monthly rent, because no open dataset publishes rents by UPZ:
+
+```
+rent ≈ (appraisal per m² ÷ 0.85) × 60 m² × 6.2 % per year ÷ 12
+```
+
+- **Appraisal per m²:** median *avalúo catastral* of residential apartments in the UPZ (Catastro Bogotá, 2026).
+- **0.85:** appraisal-to-market-value ratio (70 %–100 % in Bogotá; midpoint).
+- **6.2 % per year:** rental yield measured by Catastro's Observatorio Técnico Catastral (OTC).
+- **60 m²:** typical apartment (project assumption).
+
+The ranking between UPZ is official data; the peso amount is an estimate. It can be **calibrated with real Metrocuadrado / Fincaraíz listings collected by hand** in `data/calibracion_arriendos.csv` (`cd src && python3 -m ETL.calibracion`): the median ratio between listings and estimates becomes a city-wide correction factor. Sources, assumptions, calibration and limitations: **[DOCS/PRECIO.md](DOCS/PRECIO.md)**.
 
 ### Tests and coverage
 
@@ -327,7 +343,7 @@ Luego abre <http://localhost:8000>. El servidor (solo librería estándar) sirve
 | `GET /api/zonas` | Todas las UPZ con localidad, tipo, arriendo y variables normalizadas |
 | `GET /api/recomendar?transporte=1-5&seguridad=1-5&precio=1-5&universidades=1-5&verdes=1-5&presupuesto=COP[&k=3][&industrial=si\|no]` | Top-k de zonas con % de similitud |
 
-El front ya no tiene datos ni KNN propios: todo viene de la API. Las variables provisionales se marcan en la interfaz. «Guardar búsqueda», «Ver inmuebles disponibles» y el mapa siguen **simulados**.
+El front ya no tiene datos ni KNN propios: todo viene de la API. El arriendo se muestra como estimado. «Guardar búsqueda», «Ver inmuebles disponibles» y el mapa siguen **simulados**.
 
 ### Motor KNN en Python
 
@@ -362,12 +378,28 @@ cd src && python3 -m ETL.construir_zonas
 | Transporte | `movilidad/transportepublico` (estaciones y portales TM, paraderos SITP) | Estaciones/paraderos por km² |
 | Zonas verdes | `recreaciondeporte/parquesyescenarios` (IDRD) | % del área de la UPZ en parques |
 | Tipo | Tabla hardcodeada `src/ETL/tipos_upz.py` (categorías del POT) | `industrial` / `dotacional` / `residencial` |
+| Precio / arriendo | Catastro `catastro/medavalcatphmz` capa 1: mediana del avalúo catastral por m² de apartamentos (PH residencial) por manzana, vigencia 2026 | Mediana por UPZ → `precio` (1 = más barata) y arriendo mensual estimado ([detalle](DOCS/PRECIO.md)) |
 | Universidades | SNIES (Catastro `educacion/infraestructuraeducativa` capa 1) + predios de campus del POT ([SDP](https://serviciosg.sdp.gov.co/server/rest/services/POT555)) + 8 sedes ubicadas a mano (`src/ETL/universidades.py`) | Sedes a 2 km o menos del centroide de la UPZ |
 | Seguridad | [SDSCJ](https://oaiee.scj.gov.co/agc/rest/services/Tematicos_Pub/CifrasSCJ/MapServer) `CifrasSCJ`, capas 3 (incidentes 123 por UPZ) y 0 (delitos de alto impacto por localidad) | 70 % incidentes por km² de la UPZ + 30 % delitos por km² de la localidad, promedio ene–sep 2025–2026, invertido (1 = más segura) |
 
 Cada indicador se divide por su percentil 95, calculado solo sobre las UPZ residenciales, y se recorta a `[0, 1]`. Un parque que cruza límites cuenta en todas las UPZ que toca, y su área se reparte según la porción que cae en cada una. Las UPZ industriales y dotacionales **se marcan, no se excluyen**.
 
-**KNN híbrido:** `KNN/knn.py` carga `data/zonas.csv` (transporte, seguridad, universidades, verdes, localidad y tipo reales) y completa el arriendo con **valores provisionales por localidad** (`PROVISIONAL_POR_LOCALIDAD`) hasta tener una fuente verificada. `recomendar(..., industrial=True|False|None)` responde "¿buscas zona industrial? sí / no / sin preferencia".
+**KNN:** `KNN/knn.py` carga `data/zonas.csv`: las 5 variables salen de fuentes oficiales y ya ninguna es provisional. `recomendar(..., industrial=True|False|None)` responde "¿buscas zona industrial? sí / no / sin preferencia".
+
+#### Precio y arriendo estimado
+
+El filtro de presupuesto usa un arriendo mensual **estimado**, porque ningún dato abierto publica cánones de arriendo por UPZ:
+
+```
+arriendo ≈ (avalúo/m² ÷ 0,85) × 60 m² × 6,2 % anual ÷ 12
+```
+
+- **Avalúo/m²:** mediana del avalúo catastral de apartamentos (PH residencial) de la UPZ (Catastro Bogotá, 2026).
+- **0,85:** relación avalúo/valor comercial (en Bogotá entre 70 % y 100 %; punto medio).
+- **6,2 % anual:** tasa de renta medida por el Observatorio Técnico Catastral (OTC) de Catastro.
+- **60 m²:** apartamento típico (supuesto del proyecto).
+
+El orden entre UPZ es dato oficial; el valor en pesos es una estimación. Se puede **calibrar con anuncios reales de Metrocuadrado y Fincaraíz recogidos a mano** en `data/calibracion_arriendos.csv` (`cd src && python3 -m ETL.calibracion`): la mediana de la razón anuncio/estimado se vuelve un factor de corrección para toda la ciudad. Fuentes, supuestos, calibración y limitaciones: **[DOCS/PRECIO.md](DOCS/PRECIO.md)**.
 
 ### Pruebas y cobertura
 

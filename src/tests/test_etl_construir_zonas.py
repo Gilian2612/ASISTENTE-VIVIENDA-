@@ -59,6 +59,12 @@ def ies(x, y, estado="01"):
             "geometry": {"type": "Point", "coordinates": [x, y]}}
 
 
+def manzana(x, y, avaluo_m2):
+    """Manzana de 50x50 m con mediana de avalúo PH residencial por m²."""
+    return {"type": "Feature", "properties": {"AV_CAT_PH_RESIDENCIAL": avaluo_m2},
+            "geometry": cuadrado(x, y, 50)}
+
+
 def capas_base(**cambios):
     capas = {
         "upz": [UPZ_A, UPZ_B],
@@ -73,6 +79,10 @@ def capas_base(**cambios):
         # Universidades: 1 sede SNIES en el centro de A; ningún campus POT.
         "ies_snies": [ies(500, 500)],
         "campus_pot": [],
+        # Avalúo PH residencial: 3 manzanas en A (1, 2, 3 M/m²) y 3 en B (4, 5, 6 M/m²).
+        "avaluo_ph": [manzana(x, y, v) for x, y, v in [
+            (100, 100, 1e6), (300, 300, 2e6), (600, 600, 3e6),
+            (1100, 100, 4e6), (1300, 300, 5e6), (1600, 600, 6e6)]],
     }
     capas.update(cambios)
     return capas
@@ -320,6 +330,12 @@ class TestConstruir:
 
 class TestEscribirCsv:
     @pytest.mark.unit
+    def test_columnas_personalizadas(self, tmp_path):
+        ruta = tmp_path / "z.csv"
+        escribir_csv([{"a": 1, "b": 2}], ruta, columnas=["a", "b"])
+        assert ruta.read_text(encoding="utf-8").splitlines() == ["a,b", "1,2"]
+
+    @pytest.mark.unit
     def test_crea_carpeta_y_escribe(self, tmp_path):
         ruta = tmp_path / "sub" / "zonas.csv"
         filas = construir(capas_base())
@@ -406,3 +422,37 @@ class TestUniversidadesEnConstruir:
         a, _ = construir(capas_base(ies_snies=[]))
         assert a["universidades_2km"] == 0
         assert a["universidad_cercana_m"] == ""
+
+
+class TestPrecioEnConstruir:
+    """`precio` = 1 - mediana del avalúo PH residencial normalizada; arriendo estimado en COP."""
+
+    @pytest.mark.unit
+    def test_mediana_por_upz_y_arriendo(self):
+        from ETL import precio
+        a, b = construir(capas_base())
+        assert (a["avaluo_ph_m2"], a["manzanas_ph"], a["avaluo_fuente"]) == (2_000_000, 3, "upz")
+        assert b["avaluo_ph_m2"] == 5_000_000
+        assert a["arriendo_avaluo"] == round(precio.arriendo_estimado(2e6), -3)
+        assert a["arriendo_estimado"] == a["arriendo_avaluo"]  # sin calibrar en construir()
+
+    @pytest.mark.unit
+    def test_mas_cara_menor_precio(self):
+        a, b = construir(capas_base())
+        assert a["precio"] > b["precio"]
+        assert b["precio"] == 0.0  # la más cara (en el tope) queda en 0
+
+    @pytest.mark.unit
+    def test_upz_con_pocas_manzanas_usa_su_localidad(self):
+        manzanas = capas_base()["avaluo_ph"][:3]  # solo A tiene manzanas
+        a, b = construir(capas_base(avaluo_ph=manzanas))
+        assert b["avaluo_fuente"] == "localidad"
+        assert b["avaluo_ph_m2"] == 2_000_000  # mediana de la localidad (= las de A)
+        assert b["manzanas_ph"] == 0
+
+    @pytest.mark.unit
+    def test_sin_avaluos_queda_vacio_y_precio_neutral(self):
+        filas = construir(capas_base(avaluo_ph=[]))
+        assert all(f["arriendo_estimado"] == f["arriendo_avaluo"] == "" for f in filas)
+        assert all(f["avaluo_fuente"] == "" for f in filas)
+        assert all(f["precio"] == 0.5 for f in filas)
